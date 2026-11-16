@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
         with:
-          drivers: hxn-gpu-webgpu hxn-gpu-webgl2
+          drivers: hxn-gpu-webgpu:0.3.0 hxn-gpu-webgl2:0.3.0
           web: "true"
       - name: Build and run
         env:
@@ -52,10 +52,11 @@ jobs:
             gpu="--enable-unsafe-webgpu --enable-unsafe-swiftshader --use-webgpu-adapter=swiftshader --enable-features=Vulkan --use-vulkan=swiftshader --use-angle=swiftshader"
             nogpu="--enable-unsafe-swiftshader --use-angle=swiftshader --disable-features=WebGPUService"
           fi
-          libs="-lib hxn-gpu -lib hxn-gpu-webgpu -lib hxn-gpu-webgl2 -lib hxnsl -cp examples/check -main Main"
-          # build <directory> [defines...]: the check, for this job's runtime.
+          libs="-lib hxn-gpu -lib hxn-gpu-webgpu -lib hxn-gpu-webgl2 -lib hxnsl"
+          # build <example> <directory> [defines...]: an example, for this job's runtime.
           build() {
-            local dir=$1; shift
+            local example=$1 dir=$2; shift 2
+            local libs="$libs -cp examples/$example -main Main"
             case "$RUNTIME" in
               hxcpp) haxe $libs -cpp "$dir" -D emscripten -D disable_unicode_strings -D HXCPP_LINK_EMSCRIPTEN_EXT=.html -D HXCPP_LINK_EMRUN "$@" ;;
               "hxcpp threaded") haxe $libs -cpp "$dir" -D emscripten -D hxn_threads -D disable_unicode_strings -D HXCPP_LINK_EMSCRIPTEN_EXT=.html -D HXCPP_LINK_EMRUN "$@" ;;
@@ -94,11 +95,22 @@ jobs:
               status=1
             fi
           }
-          build out/default
-          build out/webgl2 -D hxn_gpu_backend=webgl2
+          build check out/default
+          build check out/webgl2 -D hxn_gpu_backend=webgl2
+          build present out/present
+          build present out/present-webgl2 -D hxn_gpu_backend=webgl2
           echo "== WebGPU"; page out/default "$gpu"; expect webgpu
           grep -q '^compute: 64 values' page.txt || { echo "::error::$RUNTIME: no compute on WebGPU"; status=1; }
           echo "== WebGL2"; page out/webgl2 "$gpu"; expect webgl2
           echo "== no WebGPU"; page out/default "$nogpu"; expect webgl2
           grep -q '^hxn-gpu: using webgl2, since webgpu failed to open' page.txt || { echo "::error::$RUNTIME: no fallback warning"; status=1; }
+          # Three frames to the canvas, the last read back: red around a white quad.
+          for backend in webgpu webgl2; do
+            dir=out/present; [ $backend = webgl2 ] && dir=out/present-webgl2
+            echo "== present on $backend"; page $dir "$gpu"
+            if ! grep -q "^device: $backend" page.txt || ! grep -q "^present: 3 frames to the web page's canvas, the last 255, 0, 0 around a white quad" page.txt; then
+              echo "::error::$RUNTIME: presenting on $backend failed"
+              status=1
+            fi
+          done
           exit $status

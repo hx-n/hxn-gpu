@@ -39,6 +39,9 @@ enum abstract Feature(Int) to Int {
 	**/
 	var PipelineConstants = 128;
 
+	/** Presenting to a window or the web page's canvas through a `GpuSurface`. **/
+	var Presentation = 512;
+
 	/** Every feature, in the order `Features.toString` lists them. **/
 	public static final all:Array<Feature> = [
 		Compute,
@@ -49,7 +52,8 @@ enum abstract Feature(Int) to Int {
 		MultipleVertexBuffers,
 		BufferCopies,
 		InstanceVertexBuffers,
-		PipelineConstants
+		PipelineConstants,
+		Presentation
 	];
 
 	public function toString():String {
@@ -62,6 +66,7 @@ enum abstract Feature(Int) to Int {
 			case MultipleVertexBuffers: "multiple vertex buffers";
 			case BufferCopies: "buffer copies";
 			case InstanceVertexBuffers: "instance vertex buffers";
+			case Presentation: "presentation";
 			case PipelineConstants: "pipeline constants";
 		}
 	}

@@ -28,6 +28,14 @@ interface Driver {
 	/** The rows top first, each `width * bytesPerPixel` long. **/
 	function readTexture(texture:Texture):Future<Bytes>;
 	function submit(steps:Array<Step>):Void;
+	function createSurface(surface:GpuSurface):Void;
+	function surfaceFormat(surface:GpuSurface):TextureFormat;
+	/** Sizes the surface's frames from its `width`, `height`, `format` and `vsync`. **/
+	function configureSurface(surface:GpuSurface):Void;
+	/** The texture of the surface's next frame, with `RenderTarget` usage. **/
+	function surfaceTexture(surface:GpuSurface):Texture;
+	/** Shows `frame`, after the work submitted before. **/
+	function present(surface:GpuSurface, frame:Texture):Void;
 	function completed():Future<hxn.Unit>;
 	function close():Void;
 }

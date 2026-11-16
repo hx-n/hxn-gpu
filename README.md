@@ -82,10 +82,54 @@ feature and the backend.
 | `InstanceVertexBuffers` | yes | | yes | yes | | yes |
 | `BufferCopies` | | | | | yes | |
 | `PipelineConstants` | | | | | yes | |
+| `Presentation` | yes | yes | yes | yes | yes | yes |
 
 A blank cell is a feature the driver doesn't expose yet, not one the platform
 lacks. `limits` are the minimums every device of the backend guarantees:
 WebGPU's default limits, or OpenGL ES 3.0's on GLES and WebGL2.
+
+## Presenting
+
+A `GpuSurface` presents frames to a window, from
+[hxn-window](https://github.com/hx-n/hxn-window), or to the web page's canvas.
+Pass the window or `Canvas` to `GpuDevice.open` as `surface`: GLES and WebGL2
+make their context for it, and in a browser the backend that opens claims the
+page's canvas. Then configure the surface, and each frame render into its
+current texture and present it:
+
+```haxe
+import hxn.gpu.*;
+
+var target = SurfaceTargets.ofWindow(window);        // or Canvas in a browser
+GpuDevice.open({surface: target}).then(device -> {
+	var surface = device.createSurface(target);
+	surface.configure(width, height);                // again when the window is resized
+	function frame() {
+		var texture = surface.currentTexture();
+		var encoder = device.createCommandEncoder();
+		var pass = encoder.beginRenderPass(texture, {r: 0, g: 0, b: 0, a: 1});
+		// ... draws ...
+		pass.end();
+		device.submit(encoder);
+		surface.present();
+	}
+	frame();
+});
+```
+
+| Backend | Presents to |
+|---|---|
+| Metal | AppKit and UIKit windows |
+| Direct3D 12 | Win32 windows |
+| Vulkan | AppKit and UIKit windows through MoltenVK, Win32, Xlib, Wayland and Android windows |
+| GLES | Xlib, Wayland, Win32 and AppKit windows through ANGLE, and Android windows |
+| WebGPU, WebGL2 | The web page's canvas |
+
+`surface.preferredFormat()` is the format a render pipeline for the surface
+uses, and `configure` takes it by default. A window on a high-density display
+can have frames larger in pixels than the size configured: read the size from
+the texture. Frames on Metal can't be read back; the other backends'
+`readTexture` reads a frame before it is presented.
 
 ## Shaders
 
@@ -154,8 +198,6 @@ thread the browser settles WebGPU's promises on.
 
 ## Limitations
 
-- Rendering is offscreen: passes draw into textures, and presenting to a
-  window or canvas comes later.
 - One queue, and resources tracked whole: a buffer or a texture's only mip level.
 - On GLES and WebGL2, `readTexture` reads back only RGBA8, and rows rendered
   into a texture come back bottom first.
@@ -166,15 +208,19 @@ thread the browser settles WebGPU's promises on.
 
 The check renders, computes, samples a texture and reads a buffer back on each
 backend the machine has, and prints the same lines everywhere. A step whose
-feature a device lacks prints that it was skipped.
+feature a device lacks prints that it was skipped. The present example draws
+three frames to an hxn-window window, or in a web page to its canvas, and
+reads the last back where the backend can.
 
 ```
 haxe -lib hxn-gpu -lib hxn-gpu-metal -lib hxnsl -cp examples/check -main Main -hl out/main.hl
 ash out/main.hl
+haxe -lib hxn-gpu -lib hxn-gpu-metal -lib hxn-window -lib hxnsl -cp examples/present -main Main -hl out/present.hl
+ash out/present.hl
 ```
 
-`HXN_GPU_BACKEND` selects the backend. CI runs the check on each backend
-under Ash and hxcpp, natively and in headless Chrome.
+`HXN_GPU_BACKEND` selects the backend. CI runs both on each backend under
+Ash and hxcpp, natively on real windows and in headless Chrome on the canvas.
 
 ## Agent skill
 

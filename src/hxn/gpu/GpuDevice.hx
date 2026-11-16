@@ -22,6 +22,13 @@ typedef OpenOptions = {
 		page shows in its console. Pass `_ -> {}` to drop it.
 	**/
 	final ?warn:String->Void;
+
+	/**
+		The window or canvas the device will present to. OpenGL ES and WebGL2
+		make their context for it, so `createSurface` there takes only this
+		target; the other backends present to any.
+	**/
+	final ?surface:SurfaceTarget;
 }
 
 /**
@@ -38,7 +45,7 @@ typedef OpenOptions = {
 	that initializes.
 **/
 class GpuDevice {
-	static final openers:Array<{backend:Backend, features:Features, open:() -> Future<Driver>}> = [
+	static final openers:Array<{backend:Backend, features:Features, open:Null<SurfaceTarget>->Future<Driver>}> = [
 		#if hxn_gpu_metal
 		{backend: Metal, features: hxn.gpu.backend.MetalDriver.FEATURES, open: hxn.gpu.backend.MetalDriver.open},
 		#end
@@ -160,7 +167,8 @@ class GpuDevice {
 				reasons.push('${o.backend} lacks ${[for (f in missing) f.toString()].join(", ")}');
 				return attempt(i + 1);
 			}
-			var opened = try o.open() catch (e:Exception) Future.rejected(e);
+			var surface = options != null ? options.surface : null;
+			var opened = try o.open(surface) catch (e:Exception) Future.rejected(e);
 			return opened.map(driver -> {
 				if (failed.length > 0)
 					warn('hxn-gpu: using ${o.backend}, since ${failed.join("; ")}');
@@ -276,6 +284,15 @@ class GpuDevice {
 		var bindGroup = new BindGroup(this, pipeline.shader, group, descriptor.entries, layout);
 		driver.createBindGroup(bindGroup);
 		return bindGroup;
+	}
+
+	/** A surface presenting to `target`, a window or the web page's canvas. Needs `Presentation`. **/
+	public function createSurface(target:SurfaceTarget):GpuSurface {
+		live();
+		need(Presentation, "a surface");
+		var surface = new GpuSurface(this, target);
+		driver.createSurface(surface);
+		return surface;
 	}
 
 	public function createCommandEncoder():CommandEncoder {

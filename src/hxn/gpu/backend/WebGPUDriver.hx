@@ -14,6 +14,7 @@ import hxn.gpu.webgpu.Instance;
 import hxn.gpu.webgpu.PipelineLayout;
 import hxn.gpu.webgpu.RenderPass as NativeRenderPass;
 import hxn.gpu.webgpu.ShaderModule as NativeModule;
+import hxn.gpu.webgpu.Surface as NativeSurface;
 import hxn.gpu.webgpu.Texture as NativeTexture;
 import hxn.gpu.webgpu.TextureUsage as NativeTextureUsage;
 import haxe.io.Bytes;
@@ -39,7 +40,7 @@ private class Program {
 
 /** The WebGPU backend, over hxn-gpu-webgpu. **/
 class WebGPUDriver implements Driver {
-	public static final FEATURES:Features = [Compute, StorageTextures, TextureWrites, BindingOffsets, BufferCopies, PipelineConstants];
+	public static final FEATURES:Features = [Compute, StorageTextures, TextureWrites, BindingOffsets, BufferCopies, PipelineConstants, Presentation];
 
 	public final backend:Backend = WebGPU;
 	public final adapter:String;
@@ -57,10 +58,15 @@ class WebGPUDriver implements Driver {
 		adapter = gpuAdapter.info();
 	}
 
-	public static function open():Future<Driver> {
+	public static function open(surface:Null<SurfaceTarget>):Future<Driver> {
 		var instance = Instance.create();
-		return (instance.requestAdapter())
-			.flatMap(adapter -> (adapter.requestDevice()).map(device -> (new WebGPUDriver(instance, adapter, device) : Driver)));
+		var opened = instance.requestAdapter()
+			.flatMap(adapter -> adapter.requestDevice().map(device -> (new WebGPUDriver(instance, adapter, device) : Driver)));
+		// The canvas goes to the backend that opens, once it has, so a failed one leaves it to the next.
+		return switch (surface) {
+			case Canvas: opened.flatMap(driver -> instance.claimCanvas().map(_ -> driver));
+			case _: opened;
+		}
 	}
 
 	public function createBuffer(buffer:Buffer, contents:Null<Bytes>):Void {
@@ -213,6 +219,36 @@ class WebGPUDriver implements Driver {
 		for (pass in passes)
 			pass.close();
 		encoder.close();
+	}
+
+	public function createSurface(surface:GpuSurface):Void {
+		switch (surface.target) {
+			case Canvas:
+				surface.native = instance.createCanvasSurface();
+			case Window(_, _):
+				throw "WebGPU presents to the web page's canvas, not a window";
+		}
+	}
+
+	public function surfaceFormat(surface:GpuSurface):TextureFormat {
+		var preferred = (cast surface.native : NativeSurface).preferredFormat(gpuAdapter);
+		return preferred == hxn.gpu.webgpu.Format.Rgba8Unorm ? Rgba8Unorm : Bgra8Unorm;
+	}
+
+	public function configureSurface(surface:GpuSurface):Void {
+		var usage = NativeTextureUsage.RenderAttachment | NativeTextureUsage.CopySrc;
+		(cast surface.native : NativeSurface).configure(device, format(surface.format), usage, surface.width, surface.height);
+	}
+
+	public function surfaceTexture(surface:GpuSurface):Texture {
+		var frame = new Texture(surface.device, surface.width, surface.height, surface.format, RenderTarget);
+		frame.native = (cast surface.native : NativeSurface).currentTexture();
+		return frame;
+	}
+
+	public function present(surface:GpuSurface, frame:Texture):Void {
+		// The browser shows the frame once the program returns to its event loop.
+		frame.close();
 	}
 
 	public function completed():Future<hxn.Unit> {

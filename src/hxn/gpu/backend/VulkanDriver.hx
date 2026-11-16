@@ -39,12 +39,30 @@ private class Program {
 	}
 }
 
+/** A window's surface, and the swapchain made for it when it is configured. **/
+private class VulkanSurface {
+	public final surface:hxn.gpu.vulkan.Surface;
+	public var swapchain:Null<hxn.gpu.vulkan.Swapchain>;
+	public var format:Null<TextureFormat>;
+	public var vsync = true;
+
+	public function new(surface:hxn.gpu.vulkan.Surface) {
+		this.surface = surface;
+	}
+
+	public function close():Void {
+		if (swapchain != null)
+			swapchain.close();
+		surface.close();
+	}
+}
+
 /**
 	The Vulkan backend, over hxn-gpu-vulkan. The tracker turns each change in a resource's
 	use into a pipeline barrier, including image layout transitions.
 **/
 class VulkanDriver implements Driver {
-	public static final FEATURES:Features = [Compute, StorageTextures, BindingOffsets, MultipleVertexBuffers, InstanceVertexBuffers];
+	public static final FEATURES:Features = [Compute, StorageTextures, BindingOffsets, MultipleVertexBuffers, InstanceVertexBuffers, Presentation];
 
 	public final backend:Backend = Vulkan;
 	public final adapter:String;
@@ -62,7 +80,7 @@ class VulkanDriver implements Driver {
 		this.adapter = adapter;
 	}
 
-	public static function open():Future<Driver> {
+	public static function open(surface:Null<SurfaceTarget>):Future<Driver> {
 		return Settled.attempt(() -> {
 			var instance = Instance.create("hxn-gpu");
 			// Prefer a hardware GPU; otherwise take the first device, which may be a
@@ -213,6 +231,52 @@ class VulkanDriver implements Driver {
 		return lastDone;
 	}
 
+	public function createSurface(surface:GpuSurface):Void {
+		switch (surface.target) {
+			case Window(platform, handles):
+				surface.native = new VulkanSurface(instance.createSurface(platform, handles[0], handles[1], handles[2], handles[3]));
+			case Canvas:
+				throw "Vulkan has no web page canvas";
+		}
+	}
+
+	public function surfaceFormat(surface:GpuSurface):TextureFormat
+		return Bgra8Unorm;
+
+	public function configureSurface(surface:GpuSurface):Void {
+		var native:VulkanSurface = cast surface.native;
+		if (native.swapchain != null && native.format == surface.format && native.vsync == surface.vsync) {
+			native.swapchain.resize(surface.width, surface.height);
+			return;
+		}
+		idle();
+		if (native.swapchain != null)
+			native.swapchain.close();
+		native.swapchain = device.createSwapchain(native.surface, surface.width, surface.height, format(surface.format), surface.vsync);
+		native.format = surface.format;
+		native.vsync = surface.vsync;
+	}
+
+	public function surfaceTexture(surface:GpuSurface):Texture {
+		var swapchain = (cast surface.native : VulkanSurface).swapchain;
+		var image = swapchain.acquire();
+		var frame = new Texture(surface.device, swapchain.width(), swapchain.height(), surface.format, RenderTarget);
+		frame.native = image;
+		return frame;
+	}
+
+	public function present(surface:GpuSurface, frame:Texture):Void {
+		var commands = device.createCommandBuffer();
+		barrier(commands, frame, Present, 0);
+		run(commands);
+		var swapchain = (cast surface.native : VulkanSurface).swapchain;
+		// The window changed size: the next frame needs a swapchain made for it.
+		if (!swapchain.present())
+			swapchain.resize(surface.width, surface.height);
+		tracker.forget(frame.id);
+		frame.close();
+	}
+
 	public function close():Void {
 		idle();
 		device.close();
@@ -319,6 +383,7 @@ class VulkanDriver implements Driver {
 			case CopySrc | CopyDst: Stage.Transfer;
 			case Vertex | Index: Stage.VertexInput;
 			case RenderTarget: Stage.ColorAttachmentOutput;
+			case Present: Stage.BottomOfPipe;
 			case Uniform | StorageRead | StorageWrite | Sampled:
 				var bits = 0;
 				if (use.stages & Tracker.COMPUTE != 0)
@@ -340,6 +405,7 @@ class VulkanDriver implements Driver {
 			case StorageRead | Sampled: VkAccess.ShaderRead;
 			case StorageWrite: VkAccess.ShaderRead | VkAccess.ShaderWrite;
 			case RenderTarget: VkAccess.ColorAttachmentRead | VkAccess.ColorAttachmentWrite;
+			case Present: 0;
 		}
 	}
 
@@ -350,6 +416,7 @@ class VulkanDriver implements Driver {
 			case CopyDst: Layout.TransferDst;
 			case Sampled: Layout.ShaderReadOnly;
 			case RenderTarget: Layout.ColorAttachment;
+			case Present: Layout.Present;
 			case _: Layout.General;
 		}
 	}

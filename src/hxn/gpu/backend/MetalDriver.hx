@@ -8,6 +8,8 @@ import hxn.gpu.metal.CommandBuffer;
 import hxn.gpu.metal.CommandQueue;
 import hxn.gpu.metal.ComputeEncoder;
 import hxn.gpu.metal.Device as NativeDevice;
+import hxn.gpu.metal.Drawable;
+import hxn.gpu.metal.Layer;
 import hxn.gpu.metal.Function;
 import hxn.gpu.metal.Library;
 import hxn.gpu.metal.RenderEncoder;
@@ -41,6 +43,22 @@ private class Program {
 	}
 }
 
+/** A window's `CAMetalLayer`, made when the surface is first configured, and the drawable of the frame being drawn. **/
+private class MetalSurface {
+	public var layer:Null<Layer>;
+	public var format:Null<TextureFormat>;
+	public var drawable:Null<Drawable>;
+
+	public function new() {}
+
+	public function close():Void {
+		if (drawable != null)
+			drawable.close();
+		if (layer != null)
+			layer.close();
+	}
+}
+
 /** Placeholder native for bind groups, which Metal binds at draw time. **/
 private class Unbound {
 	public function new() {}
@@ -56,7 +74,8 @@ class MetalDriver implements Driver {
 		TextureWrites,
 		BindingOffsets,
 		MultipleVertexBuffers,
-		InstanceVertexBuffers
+		InstanceVertexBuffers,
+		Presentation
 	];
 
 	/**
@@ -82,7 +101,10 @@ class MetalDriver implements Driver {
 		adapter = device.name();
 	}
 
-	public static function open():Future<Driver> {
+	// The textures of window frames, which a layer's drawable lends and the CPU cannot read.
+	final frames = new Map<Int, Bool>();
+
+	public static function open(surface:Null<SurfaceTarget>):Future<Driver> {
 		return Settled.attempt(() -> (new MetalDriver(NativeDevice.systemDefault()) : Driver));
 	}
 
@@ -165,6 +187,8 @@ class MetalDriver implements Driver {
 	}
 
 	public function readTexture(texture:Texture):Future<Bytes> {
+		if (frames.exists(texture.id))
+			throw "a Metal window frame is only drawn into and presented: it cannot be read back";
 		var native:NativeTexture = cast texture.native;
 		var done = lastDone;
 		#if !hxn_gpu_ios
@@ -195,6 +219,63 @@ class MetalDriver implements Driver {
 
 	public function completed():Future<hxn.Unit> {
 		return lastDone;
+	}
+
+	public function createSurface(surface:GpuSurface):Void {
+		switch (surface.target) {
+			case Window(1 | 6, _):
+				surface.native = new MetalSurface();
+			case Window(platform, _):
+				throw 'Metal presents to AppKit and UIKit windows, not platform $platform';
+			case Canvas:
+				throw "Metal has no web page canvas";
+		}
+	}
+
+	public function surfaceFormat(surface:GpuSurface):TextureFormat
+		return Bgra8Unorm;
+
+	public function configureSurface(surface:GpuSurface):Void {
+		var native:MetalSurface = cast surface.native;
+		// A layer has one pixel format, so a new format takes a new layer.
+		if (native.layer != null && native.format != surface.format) {
+			native.layer.close();
+			native.layer = null;
+		}
+		if (native.layer == null) {
+			var view = switch (surface.target) {
+				case Window(_, handles): handles[0];
+				case Canvas: throw "Metal has no web page canvas";
+			}
+			native.layer = Layer.attach(device, view, format(surface.format));
+			native.format = surface.format;
+		}
+		native.layer.setDrawableSize(surface.width, surface.height);
+	}
+
+	public function surfaceTexture(surface:GpuSurface):Texture {
+		var native:MetalSurface = cast surface.native;
+		var drawable = native.layer.nextDrawable();
+		if (drawable == null)
+			throw "the window's layer has no drawable to give";
+		native.drawable = drawable;
+		var frame = new Texture(surface.device, surface.width, surface.height, surface.format, RenderTarget);
+		frame.native = drawable.texture();
+		frames.set(frame.id, true);
+		return frame;
+	}
+
+	public function present(surface:GpuSurface, frame:Texture):Void {
+		var native:MetalSurface = cast surface.native;
+		var drawable = native.drawable;
+		native.drawable = null;
+		frames.remove(frame.id);
+		var commands = queue.commandBuffer();
+		commands.present(drawable);
+		commit(commands).then(_ -> {
+			frame.close();
+			drawable.close();
+		}, _ -> drawable.close());
 	}
 
 	public function close():Void {

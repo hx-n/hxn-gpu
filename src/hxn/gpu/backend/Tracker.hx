@@ -14,6 +14,8 @@ enum abstract Access(Int) to Int {
 	var StorageWrite;
 	var Sampled;
 	var RenderTarget;
+	/** Handed to the window system to be shown. **/
+	var Present;
 
 	public function writes():Bool {
 		return switch (cast this : Access) {

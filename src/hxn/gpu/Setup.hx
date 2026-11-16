@@ -8,11 +8,11 @@ class Setup {
 	/** The driver versions hxn-gpu supports, as major.minor. **/
 	static final supported = [
 		"hxn-gpu-metal" => "0.2",
-		"hxn-gpu-vulkan" => "0.2",
+		"hxn-gpu-vulkan" => "0.3",
 		"hxn-gpu-d3d12" => "0.2",
-		"hxn-gpu-gles" => "0.2",
-		"hxn-gpu-webgpu" => "0.2",
-		"hxn-gpu-webgl2" => "0.2"
+		"hxn-gpu-gles" => "0.3",
+		"hxn-gpu-webgpu" => "0.3",
+		"hxn-gpu-webgl2" => "0.3"
 	];
 
 	public static function check():Void {

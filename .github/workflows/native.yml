@@ -28,15 +28,15 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            drivers: hxn-gpu-metal hxn-gpu-gles
+            drivers: hxn-gpu-metal:0.2.0 hxn-gpu-gles:0.3.0
             backends: metal gles
             hl: "false"
           - os: ubuntu-latest
-            drivers: hxn-gpu-vulkan hxn-gpu-gles
+            drivers: hxn-gpu-vulkan:0.3.0 hxn-gpu-gles:0.3.0
             backends: vulkan gles
             hl: "true"
           - os: windows-latest
-            drivers: hxn-gpu-d3d12 hxn-gpu-gles
+            drivers: hxn-gpu-d3d12:0.2.0 hxn-gpu-gles:0.3.0
             backends: d3d12 gles
             hl: "true"
     env:
@@ -50,7 +50,8 @@ jobs:
       - if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-validationlayers libegl1 libgles2 libegl-mesa0 libgl1-mesa-dri
+          sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-validationlayers libegl1 libgles2 libegl-mesa0 libgl1-mesa-dri \
+            libxkbcommon-x11-0 libxcursor1 libxrandr2 libxi6 libudev1 xvfb xauth
       # ANGLE's EGL and OpenGL ES, from Electron's release.
       - if: runner.os == 'macOS'
         env:
@@ -72,9 +73,11 @@ jobs:
       - name: Build
         run: |
           libs="-lib hxn-gpu -lib hxnsl"
-          for driver in ${{ matrix.drivers }}; do libs="$libs -lib $driver"; done
+          for driver in ${{ matrix.drivers }}; do libs="$libs -lib ${driver%%:*}"; done
           haxe $libs -cp examples/check -main Main -hl out/hl/main.hl
           haxe $libs -cp examples/check -main Main -cpp out/cpp
+          haxe $libs -lib hxn-window -cp examples/present -main Main -hl out/hl/present.hl
+          haxe $libs -lib hxn-window -cp examples/present -main Main -cpp out/present
       # Fails on a backend that does not open or a result line that is missing, rather
       # than passing on what the check prints without a device, and on any Vulkan error.
       - name: Run each backend
@@ -107,5 +110,27 @@ jobs:
             run $backend out/hl "$ASH" --mode interp main.hl
             if [ -n "${HL:-}" ]; then run $backend out/hl "$HL" main.hl; fi
             run $backend . "$main"
+          done
+          # present <backend> <directory> <command...>: three frames to a real window, on
+          # Linux on a virtual X display.
+          present() {
+            local backend=$1 dir=$2; shift 2
+            echo "== present on $backend: $*"
+            local wrap=()
+            [ "$RUNNER_OS" = Linux ] && wrap=(xvfb-run -a)
+            (cd "$dir" && HXN_GPU_BACKEND=$backend "${wrap[@]}" "$@") > present.txt 2>&1
+            local code=$?
+            cat present.txt
+            if [ $code -ne 0 ] || ! grep -q "^device: $backend" present.txt || ! grep -q '^present: 3 frames to a window' present.txt \
+              || grep -q 'Validation Error' present.txt; then
+              echo "::error::presenting on $backend failed under $*"
+              status=1
+            fi
+          }
+          presenter=out/present/Main
+          [ "$RUNNER_OS" = Windows ] && presenter=out/present/Main.exe
+          for backend in ${{ matrix.backends }}; do
+            present $backend out/hl "$ASH" present.hl
+            present $backend . "$presenter"
           done
           exit $status

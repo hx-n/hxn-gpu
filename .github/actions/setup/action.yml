@@ -3,7 +3,7 @@ description: Haxe, hxcpp, a HashLink VM or Ash, and the released haxelibs hxn-gp
 
 inputs:
   drivers:
-    description: The driver haxelibs to install, such as "hxn-gpu-metal hxn-gpu-gles".
+    description: The driver haxelibs to install at their versions, such as "hxn-gpu-metal:0.2.0 hxn-gpu-gles:0.3.0".
     required: true
   hl:
     description: true to install stock HashLink as well as Ash.
@@ -38,7 +38,8 @@ runs:
       run: |
         haxelib install hxn 0.3.5 --always
         haxelib install hxnsl 0.2.0 --always
-        for driver in ${{ inputs.drivers }}; do haxelib install "$driver" 0.2.0 --always; done
+        for driver in ${{ inputs.drivers }}; do haxelib install "${driver%%:*}" "${driver##*:}" --always; done
+        haxelib install hxn-window 0.2.0 --always
         haxelib set hxn 0.3.5 --always
         haxelib dev hxn-gpu .
     - shell: bash
@@ -50,7 +51,7 @@ runs:
         esac
         mkdir -p "$RUNNER_TEMP/ash"
         # Extracted in place: tar reads a Windows path's drive as a host.
-        (cd "$RUNNER_TEMP/ash" && curl -fsSL "https://github.com/rayzor-blade/ash/releases/download/v0.1.19/$archive" | tar -xz)
+        (cd "$RUNNER_TEMP/ash" && curl -fsSL "https://github.com/rayzor-blade/ash/releases/download/v0.1.20/$archive" | tar -xz)
         echo "ASH=$RUNNER_TEMP/ash/ash" >> "$GITHUB_ENV"
     - if: inputs.hl == 'true' && runner.os == 'Linux'
       shell: bash

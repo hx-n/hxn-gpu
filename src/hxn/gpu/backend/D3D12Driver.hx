@@ -16,6 +16,7 @@ import hxn.gpu.d3d12.PipelineState;
 import hxn.gpu.d3d12.RootLayout;
 import hxn.gpu.d3d12.RootSignature;
 import hxn.gpu.d3d12.State;
+import hxn.gpu.d3d12.Swapchain;
 import hxn.gpu.d3d12.Texture as NativeTexture;
 import haxe.io.Bytes;
 
@@ -62,6 +63,17 @@ private class Program {
 		signature.close();
 }
 
+/** A window's swap chain, made when the surface is configured and remade on a resize. **/
+private class Chain {
+	public var swapchain:Null<Swapchain>;
+
+	public function new() {}
+
+	public function close():Void
+		if (swapchain != null)
+			swapchain.close();
+}
+
 /** A bind group's first descriptor in the resource heap, and its sampler index array. **/
 private class Group {
 	public final textures:Int;
@@ -84,7 +96,10 @@ private class Group {
 	storage buffers live in the default heap and are written through staging buffers.
 **/
 class D3D12Driver implements Driver {
-	public static final FEATURES:Features = [Compute, TextureWrites, MultipleVertexBuffers];
+	public static final FEATURES:Features = [Compute, TextureWrites, MultipleVertexBuffers, Presentation];
+
+	/** The buffers of a window's swap chain. **/
+	static inline final SWAP_BUFFERS = 2;
 
 	/**
 		Size of the device's shader-visible resource heap, which all bind groups' textures
@@ -114,7 +129,7 @@ class D3D12Driver implements Driver {
 		samplers = device.createDescriptorHeap(HeapKind.Samplers, RootLayout.SAMPLER_HEAP_SIZE);
 	}
 
-	public static function open():Future<Driver> {
+	public static function open(surface:Null<SurfaceTarget>):Future<Driver> {
 		return Settled.attempt(() -> {
 			var factory = Factory.create();
 			// Prefer a hardware adapter; fall back to WARP.
@@ -303,6 +318,49 @@ class D3D12Driver implements Driver {
 		return lastDone;
 	}
 
+	public function createSurface(surface:GpuSurface):Void {
+		switch (surface.target) {
+			case Window(2, _):
+				surface.native = new Chain();
+			case Window(platform, _):
+				throw 'Direct3D 12 presents to Win32 windows, not platform $platform';
+			case Canvas:
+				throw "Direct3D 12 has no web page canvas";
+		}
+	}
+
+	public function surfaceFormat(surface:GpuSurface):TextureFormat
+		return Bgra8Unorm;
+
+	public function configureSurface(surface:GpuSurface):Void {
+		var chain:Chain = cast surface.native;
+		// The swap chain's buffers may still be drawn into or shown.
+		idle();
+		if (chain.swapchain != null)
+			chain.swapchain.close();
+		var window = switch (surface.target) {
+			case Window(_, handles): handles[0];
+			case Canvas: throw "Direct3D 12 has no web page canvas";
+		}
+		chain.swapchain = factory.createSwapchain(device, window, surface.width, surface.height, format(surface.format), SWAP_BUFFERS);
+	}
+
+	public function surfaceTexture(surface:GpuSurface):Texture {
+		var swapchain = (cast surface.native : Chain).swapchain;
+		var frame = new Texture(surface.device, surface.width, surface.height, surface.format, RenderTarget);
+		frame.native = swapchain.buffer(swapchain.currentIndex());
+		return frame;
+	}
+
+	public function present(surface:GpuSurface, frame:Texture):Void {
+		var commands = device.createCommandList();
+		transition(commands, frame, Present, 0);
+		run(commands);
+		(cast surface.native : Chain).swapchain.present(surface.vsync ? 1 : 0);
+		tracker.forget(frame.id);
+		frame.close();
+	}
+
 	public function close():Void {
 		idle();
 		samplers.close();
@@ -444,6 +502,7 @@ class D3D12Driver implements Driver {
 			case Index: State.IndexBuffer;
 			case StorageWrite: State.UnorderedAccess;
 			case RenderTarget: State.RenderTarget;
+			case Present: State.Common;
 			case StorageRead | Sampled:
 				use.stages & Tracker.GRAPHICS != 0 ? State.NonPixelShaderResource | State.PixelShaderResource : State.NonPixelShaderResource;
 		}

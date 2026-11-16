@@ -53,6 +53,13 @@ private class Program {
 		program.close();
 }
 
+/** The native of a window frame: the context's default framebuffer, which the window shows. **/
+private class DefaultFramebuffer {
+	public function new() {}
+
+	public function close():Void {}
+}
+
 /**
 	Placeholder native for shader modules and bind groups: GL links programs per pipeline
 	and binds resources at draw time.
@@ -69,7 +76,13 @@ private class Unbound {
 	barriers are needed.
 **/
 class GlDriver implements Driver {
-	public static final FEATURES:Features = [TextureWrites, IndexedDraws, MultipleVertexBuffers, InstanceVertexBuffers];
+	public static final FEATURES:Features = [TextureWrites, IndexedDraws, MultipleVertexBuffers, InstanceVertexBuffers, Presentation];
+
+	/** `EGL_PLATFORM_X11_KHR`, the EGL platform of an Xlib display. **/
+	static inline final PLATFORM_X11 = 0x31D5;
+
+	/** `EGL_PLATFORM_WAYLAND_KHR`, the EGL platform of a Wayland display. **/
+	static inline final PLATFORM_WAYLAND = 0x31D8;
 
 	public final backend:Backend;
 	public final adapter:String;
@@ -78,26 +91,54 @@ class GlDriver implements Driver {
 
 	final context:Context;
 	final release:() -> Void;
+	// The window or canvas the context was made for, whose default framebuffer it presents.
+	final target:Null<SurfaceTarget>;
 
-	function new(backend:Backend, context:Context, release:() -> Void) {
+	function new(backend:Backend, context:Context, release:() -> Void, target:Null<SurfaceTarget>) {
 		this.backend = backend;
 		this.context = context;
 		this.release = release;
+		this.target = target;
 		adapter = context.renderer();
 	}
 
-	public static function open():Future<Driver> {
+	public static function open(surface:Null<SurfaceTarget>):Future<Driver> {
 		return Settled.attempt(() -> {
 			#if hxn_gpu_gles
-			var display = Display.headless();
-			var context = try display.createContext() catch (e:haxe.Exception) {
+			// A context presents only to the window it is made for, so a surface's window decides the display.
+			var display:Display = switch (surface) {
+				case null: Display.headless();
+				case Window(3, handles): Display.native(PLATFORM_X11, handles[2]);
+				case Window(1 | 2 | 5, _): Display.native(0, 0);
+				case Window(4, handles): Display.native(PLATFORM_WAYLAND, handles[2]);
+				case Window(platform, _): throw 'GLES presents to Xlib, Wayland, Win32, AppKit through ANGLE and Android windows, not platform $platform';
+				case Canvas: throw "GLES has no web page canvas: use WebGL2";
+			}
+			var context = try switch (surface) {
+				case Window(3, handles): display.createWindowContext(handles[0], haxe.Int64.toInt(handles[1]));
+				// Sized when the surface is configured.
+				case Window(4, handles): display.createWaylandContext(handles[0], 1, 1);
+				case Window(_, handles): display.createWindowContext(handles[0], 0);
+				case _: display.createContext();
+			} catch (e:haxe.Exception) {
 				display.close();
 				throw e;
 			}
-			(new GlDriver(Gles, context, display.close) : Driver);
+			(new GlDriver(Gles, context, display.close, surface) : Driver);
 			#else
-			(new GlDriver(WebGL2, Context.create(), () -> {}) : Driver);
+			switch (surface) {
+				case Window(_, _): throw "WebGL2 presents to the web page's canvas, not a window";
+				case _:
+			}
+			(new GlDriver(WebGL2, Context.create(), () -> {}, Canvas) : Driver);
 			#end
+		}).flatMap(driver -> {
+			#if hxn_gpu_webgl2
+			// Under Ash the context draws on a canvas of its own and shows its frames on the page's.
+			if (surface != null)
+				return (cast driver : GlDriver).context.claimCanvas().map(_ -> driver);
+			#end
+			return Future.resolved(driver);
 		});
 	}
 
@@ -158,6 +199,10 @@ class GlDriver implements Driver {
 		return Settled.attempt(() -> {
 			if (texture.format != Rgba8Unorm && texture.format != Rgba8UnormSrgb)
 				throw '$backend reads back only rgba8 textures, not ${texture.format}';
+			if (Std.isOfType(texture.native, DefaultFramebuffer)) {
+				context.bindDefaultFramebuffer();
+				return context.readPixels(0, 0, texture.width, texture.height);
+			}
 			var framebuffer = context.createFramebuffer(cast texture.native);
 			context.bindFramebuffer(framebuffer);
 			var pixels = context.readPixels(0, 0, texture.width, texture.height);
@@ -183,14 +228,58 @@ class GlDriver implements Driver {
 		return (context.completed());
 	}
 
+	public function createSurface(surface:GpuSurface):Void {
+		if (target == null)
+			throw '$backend presents only to the window it opened for: pass the surface target to GpuDevice.open';
+		var same = switch [surface.target, target] {
+			case [Window(p, h), Window(q, k)]: p == q && h[0] == k[0];
+			case [Canvas, Canvas]: true;
+			case _: false;
+		}
+		if (!same)
+			throw '$backend presents only to the window it opened for, which this is not';
+		surface.native = new Unbound();
+	}
+
+	public function surfaceFormat(surface:GpuSurface):TextureFormat
+		return Rgba8Unorm;
+
+	public function configureSurface(surface:GpuSurface):Void {
+		if (surface.format != Rgba8Unorm && surface.format != Rgba8UnormSrgb)
+			throw '$backend presents rgba8 frames, not ${surface.format}';
+		#if hxn_gpu_gles
+		context.resizeWindow(surface.width, surface.height);
+		context.swapInterval(surface.vsync ? 1 : 0);
+		#else
+		context.setSize(surface.width, surface.height);
+		#end
+	}
+
+	public function surfaceTexture(surface:GpuSurface):Texture {
+		var frame = new Texture(surface.device, surface.width, surface.height, surface.format, RenderTarget);
+		frame.native = new DefaultFramebuffer();
+		return frame;
+	}
+
+	public function present(surface:GpuSurface, frame:Texture):Void {
+		#if hxn_gpu_gles
+		context.swapBuffers();
+		#else
+		context.present();
+		#end
+	}
+
 	public function close():Void {
 		context.close();
 		release();
 	}
 
 	function render(target:Texture, clear:hxn.gpu.Descriptors.Color, list:Array<Command>):Void {
-		var framebuffer = context.createFramebuffer(cast target.native);
-		context.bindFramebuffer(framebuffer);
+		var framebuffer = Std.isOfType(target.native, DefaultFramebuffer) ? null : context.createFramebuffer(cast target.native);
+		if (framebuffer != null)
+			context.bindFramebuffer(framebuffer);
+		else
+			context.bindDefaultFramebuffer();
 		context.viewport(0, 0, target.width, target.height);
 		context.clear(ClearBits.Color, clear.r, clear.g, clear.b, clear.a);
 		var pipeline:Null<RenderPipeline> = null;
@@ -267,7 +356,8 @@ class GlDriver implements Driver {
 			}
 		for (vao in arrays)
 			vao.close();
-		framebuffer.close();
+		if (framebuffer != null)
+			framebuffer.close();
 	}
 
 	/**
