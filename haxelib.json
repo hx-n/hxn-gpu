@@ -1,6 +1,6 @@
 {
   "name": "hxn-gpu",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "One GPU API for Haxe over the hxn GPU drivers: Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, with features and limits per device",
   "url": "https://github.com/hx-n/hxn-gpu",
   "license": "Apache",
@@ -9,7 +9,7 @@
     "darmie",
     "rayzor"
   ],
-  "releasenote": "In a threaded hxcpp build in a browser, await works on what the GPU settles. Needs hxn 0.3.6, hxn-gpu-webgpu 0.3.2 and hxn-gpu-webgl2 0.3.1.",
+  "releasenote": "Documents await in a threaded browser build under Ash from 0.1.21, as under hxcpp. No code changes.",
   "classPath": "src",
   "dependencies": {
     "hxn": "0.3.6",
