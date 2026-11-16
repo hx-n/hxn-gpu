@@ -62,8 +62,10 @@ jobs:
             esac
           }
           # page <directory> <chrome flags>: runs the built page, its output in page.txt.
+          # emrun appends to its logs, so each run starts the file afresh.
           page() {
             local dir=$1 flags=$2
+            rm -f page.txt
             if [ "$RUNTIME" = Ash ]; then
               # shellcheck disable=SC2086
               node "$RUNNER_TEMP/ash_page.mjs" "$ASH" "$dir" "$chrome" $flags > page.txt 2>&1
@@ -77,6 +79,8 @@ jobs:
             fi
             cat page.txt
           }
+          # Every run is checked and reported, so one failure does not end the step.
+          set +e
           status=0
           # expect <backend>: the run opened it and every step printed its result.
           expect() {

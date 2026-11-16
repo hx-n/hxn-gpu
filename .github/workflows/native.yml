@@ -79,6 +79,8 @@ jobs:
       # than passing on what the check prints without a device, and on any Vulkan error.
       - name: Run each backend
         run: |
+          # Every run is checked and reported, so one failure does not end the step.
+          set +e
           main=out/cpp/Main
           [ "$RUNNER_OS" = Windows ] && main=out/cpp/Main.exe
           status=0
