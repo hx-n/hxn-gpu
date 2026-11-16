@@ -9,7 +9,7 @@ groups, compute and render pipelines, and command encoders. Shaders are
 [hxnsl](https://github.com/hx-n/hxnsl) shaders, translated for every backend
 at compile time.
 
-hxn-gpu is written in Haxe. It runs on the hx-n driver libraries, one per
+hxn-gpu is written in Haxe. It runs on the hxn GPU drivers, one per
 backend, and works on HashLink, Ash and hxcpp, natively and in the browser.
 
 ## Drivers
