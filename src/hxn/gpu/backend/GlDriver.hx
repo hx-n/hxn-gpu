@@ -134,7 +134,7 @@ class GlDriver implements Driver {
 			#end
 		}).flatMap(driver -> {
 			#if hxn_gpu_webgl2
-			// Under Ash the context draws on a canvas of its own and shows its frames on the page's.
+			// With threads the context draws on a canvas of its own and shows its frames on the page's.
 			if (surface != null)
 				return (cast driver : GlDriver).context.claimCanvas().map(_ -> driver);
 			#end
