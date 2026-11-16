@@ -4,18 +4,7 @@
   "description": "One GPU API for Haxe over the hxn GPU drivers: Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, with features and limits per device",
   "url": "https://github.com/hx-n/hxn-gpu",
   "license": "Apache",
-  "tags": [
-    "gpu",
-    "graphics",
-    "compute",
-    "webgpu",
-    "metal",
-    "vulkan",
-    "d3d12",
-    "opengl-es",
-    "webgl2",
-    "haxe"
-  ],
+  "tags": ["gpu", "graphics", "compute", "webgpu", "metal", "vulkan", "d3d12", "opengl-es", "webgl2", "haxe", "hxcpp", "hashlink", "native", "cross", "wasm"],
   "contributors": [
     "darmie",
     "rayzor"
