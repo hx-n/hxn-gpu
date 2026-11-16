@@ -51,7 +51,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-validationlayers libegl1 libgles2 libegl-mesa0 libgl1-mesa-dri \
-            libxkbcommon-x11-0 libxcursor1 libxrandr2 libxi6 libudev1 xvfb xauth
+            libxkbcommon-x11-0 libxcursor1 libxrandr2 libxi6 libudev-dev xvfb xauth
       # ANGLE's EGL and OpenGL ES, from Electron's release.
       - if: runner.os == 'macOS'
         env:

@@ -247,7 +247,7 @@ class WebGPUDriver implements Driver {
 	}
 
 	public function present(surface:GpuSurface, frame:Texture):Void {
-		// The browser shows the frame once the program returns to its event loop.
+		(cast surface.native : NativeSurface).present();
 		frame.close();
 	}
 

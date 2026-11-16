@@ -20,7 +20,7 @@
     "darmie",
     "rayzor"
   ],
-  "releasenote": "Presents to windows and the web page's canvas on every backend: GpuSurface from device.createSurface, with configure, currentTexture and present, on Metal, Direct3D 12, Vulkan, GLES (Xlib, Wayland, Win32, AppKit through ANGLE, Android), WebGPU and WebGL2. Needs the 0.3 Vulkan, GLES, WebGPU and WebGL2 drivers.",
+  "releasenote": "Presents to windows and the web page's canvas on every backend: GpuSurface from device.createSurface, with configure, currentTexture and present, on Metal, Direct3D 12, Vulkan, GLES (Xlib, Wayland, Win32, AppKit through ANGLE, Android), WebGPU and WebGL2. Needs the 0.3 Vulkan, GLES and WebGL2 drivers and WebGPU 0.3.1.",
   "classPath": "src",
   "dependencies": {
     "hxn": "0.3.5",

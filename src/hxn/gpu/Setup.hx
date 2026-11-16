@@ -5,26 +5,30 @@ import haxe.macro.Context;
 
 /** Checks at compile time that the drivers given with `-lib` are versions hxn-gpu supports. **/
 class Setup {
-	/** The driver versions hxn-gpu supports, as major.minor. **/
+	/** The oldest driver version hxn-gpu supports in each major.minor series. **/
 	static final supported = [
-		"hxn-gpu-metal" => "0.2",
-		"hxn-gpu-vulkan" => "0.3",
-		"hxn-gpu-d3d12" => "0.2",
-		"hxn-gpu-gles" => "0.3",
-		"hxn-gpu-webgpu" => "0.3",
-		"hxn-gpu-webgl2" => "0.3"
+		"hxn-gpu-metal" => "0.2.0",
+		"hxn-gpu-vulkan" => "0.3.0",
+		"hxn-gpu-d3d12" => "0.2.0",
+		"hxn-gpu-gles" => "0.3.0",
+		"hxn-gpu-webgpu" => "0.3.1",
+		"hxn-gpu-webgl2" => "0.3.0"
 	];
 
 	public static function check():Void {
-		for (lib => series in supported) {
+		for (lib => oldest in supported) {
 			var version = Context.definedValue(lib);
 			if (version == null)
 				continue;
 			// A haxelib dev checkout defines the library without a version.
 			if (version == "1" || version == "")
 				continue;
-			if (version != series && !StringTools.startsWith(version, series + "."))
-				Context.fatalError('hxn-gpu supports $lib $series.x, not $version: install it with haxelib install $lib $series.0', Context.currentPos());
+			var want = oldest.split(".");
+			var have = version.split(".");
+			var series = want[0] + "." + want[1];
+			var patch = have.length > 2 ? Std.parseInt(have[2]) : 0;
+			if (have[0] != want[0] || have[1] != want[1] || patch == null || patch < Std.parseInt(want[2]))
+				Context.fatalError('hxn-gpu supports $lib $series.x from $oldest, not $version: install it with haxelib install $lib', Context.currentPos());
 		}
 		// The GLES and WebGL2 backends share one implementation, so only one of the two
 		// drivers can be given.
