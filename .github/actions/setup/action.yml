@@ -51,7 +51,7 @@ runs:
         esac
         mkdir -p "$RUNNER_TEMP/ash"
         # Extracted in place: tar reads a Windows path's drive as a host.
-        (cd "$RUNNER_TEMP/ash" && curl -fsSL "https://github.com/rayzor-blade/ash/releases/download/v0.1.20/$archive" | tar -xz)
+        (cd "$RUNNER_TEMP/ash" && curl -fsSL "https://github.com/rayzor-blade/ash/releases/download/v0.1.21/$archive" | tar -xz)
         echo "ASH=$RUNNER_TEMP/ash/ash" >> "$GITHUB_ENV"
     - if: inputs.hl == 'true' && runner.os == 'Linux'
       shell: bash
