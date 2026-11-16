@@ -1,6 +1,6 @@
 {
   "name": "hxn-gpu",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "One GPU API for Haxe over the hxn GPU drivers: Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, with features and limits per device",
   "url": "https://github.com/hx-n/hxn-gpu",
   "license": "Apache",
@@ -9,10 +9,10 @@
     "darmie",
     "rayzor"
   ],
-  "releasenote": "Presents to windows and the web page's canvas on every backend: GpuSurface from device.createSurface, with configure, currentTexture and present, on Metal, Direct3D 12, Vulkan, GLES (Xlib, Wayland, Win32, AppKit through ANGLE, Android), WebGPU and WebGL2. Needs the 0.3 Vulkan, GLES and WebGL2 drivers and WebGPU 0.3.1.",
+  "releasenote": "In a threaded hxcpp build in a browser, await works on what the GPU settles. Needs hxn 0.3.6, hxn-gpu-webgpu 0.3.2 and hxn-gpu-webgl2 0.3.1.",
   "classPath": "src",
   "dependencies": {
-    "hxn": "0.3.5",
+    "hxn": "0.3.6",
     "hxnsl": "0.2.0"
   }
 }

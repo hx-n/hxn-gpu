@@ -193,9 +193,10 @@ device.submit(encoder);
 device.readTexture(target).then(pixels -> trace(pixels.get(0)));
 ```
 
-In a browser without threads, deliver results with `then`: `await` blocks the
-thread the browser settles the GPU's promises on. With threads, under hxcpp or
-Ash, `await` works: the browser drivers run in a Worker of their own.
+In a threaded hxcpp build in a browser, `await` works: the browser drivers run
+in a Worker of their own and settle results on a thread of their own. Without
+threads, or under Ash, deliver results with `then`: `await` blocks the thread
+that settles them.
 
 ## Limitations
 

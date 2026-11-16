@@ -11,8 +11,8 @@ class Setup {
 		"hxn-gpu-vulkan" => "0.3.0",
 		"hxn-gpu-d3d12" => "0.2.0",
 		"hxn-gpu-gles" => "0.3.0",
-		"hxn-gpu-webgpu" => "0.3.1",
-		"hxn-gpu-webgl2" => "0.3.0"
+		"hxn-gpu-webgpu" => "0.3.2",
+		"hxn-gpu-webgl2" => "0.3.1"
 	];
 
 	public static function check():Void {
