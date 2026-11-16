@@ -42,12 +42,15 @@ jobs:
           source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
           # hxcpp uses a compiler set in CC or CXX instead of emcc.
           unset CC CXX
+          # gpu: Chrome with WebGPU; nogpu: Chrome without it, WebGL2 still on.
           if [ "$RUNNER_OS" = macOS ]; then
             chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
             gpu="--enable-unsafe-webgpu"
+            nogpu="--disable-features=WebGPUService"
           else
             chrome=google-chrome
             gpu="--enable-unsafe-webgpu --enable-unsafe-swiftshader --use-webgpu-adapter=swiftshader --enable-features=Vulkan --use-vulkan=swiftshader --use-angle=swiftshader"
+            nogpu="--enable-unsafe-swiftshader --use-angle=swiftshader --disable-features=WebGPUService"
           fi
           libs="-lib hxn-gpu -lib hxn-gpu-webgpu -lib hxn-gpu-webgl2 -lib hxnsl -cp examples/check -main Main"
           # build <directory> [defines...]: the check, for this job's runtime.
@@ -96,6 +99,6 @@ jobs:
           echo "== WebGPU"; page out/default "$gpu"; expect webgpu
           grep -q '^compute: 64 values' page.txt || { echo "::error::$RUNTIME: no compute on WebGPU"; status=1; }
           echo "== WebGL2"; page out/webgl2 "$gpu"; expect webgl2
-          echo "== no WebGPU"; page out/default "$gpu --disable-features=WebGPUService"; expect webgl2
+          echo "== no WebGPU"; page out/default "$nogpu"; expect webgl2
           grep -q '^hxn-gpu: using webgl2, since webgpu failed to open' page.txt || { echo "::error::$RUNTIME: no fallback warning"; status=1; }
           exit $status

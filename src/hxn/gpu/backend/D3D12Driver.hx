@@ -252,9 +252,9 @@ class D3D12Driver implements Driver {
 	}
 
 	public function readBuffer(buffer:Buffer, offset:Int, size:Int):Future<Bytes> {
+		// The CPU reads only readback heaps, so every buffer is copied into one; an
+		// upload heap buffer can be copied from in the one state it keeps.
 		var memory = memoryOf(buffer);
-		if (memory.upload)
-			return lastDone.map(_ -> memory.buffer.read(offset, size));
 		var readback = device.createBuffer(buffer.size, Heap.Readback, 0, false);
 		var commands = device.createCommandList();
 		transition(commands, buffer, CopySrc, 0);
