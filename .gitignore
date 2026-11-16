@@ -1,0 +1,7 @@
+# Build output of the check and of local tries.
+/examples/check/out
+/examples/check/*.hl
+/.haxelib
+# Native libraries hxn.Bind copies next to a program built from the root.
+/*.hdll
+/*.hl

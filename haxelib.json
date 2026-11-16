@@ -1,0 +1,29 @@
+{
+  "name": "hxn-gpu",
+  "version": "0.1.0",
+  "description": "One GPU API for Haxe over the hx-n drivers: Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, with features and limits per device",
+  "url": "https://github.com/hx-n/hxn-gpu",
+  "license": "Apache",
+  "tags": [
+    "gpu",
+    "graphics",
+    "compute",
+    "webgpu",
+    "metal",
+    "vulkan",
+    "d3d12",
+    "opengl-es",
+    "webgl2",
+    "haxe"
+  ],
+  "contributors": [
+    "darmie",
+    "rayzor"
+  ],
+  "releasenote": "First release: one GPU API over the hx-n drivers for Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, with features and limits per device, a default backend per platform with overrides and a warning on fallback, hxnsl shaders for every backend, and one barrier tracker for Vulkan and Direct3D 12.",
+  "classPath": "src",
+  "dependencies": {
+    "hxn": "0.3.5",
+    "hxnsl": "0.2.0"
+  }
+}

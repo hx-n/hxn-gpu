@@ -1,0 +1,82 @@
+name: setup
+description: Haxe, hxcpp, a HashLink VM or Ash, and the released haxelibs hxn-gpu runs on, without Rust.
+
+inputs:
+  drivers:
+    description: The driver haxelibs to install, such as "hxn-gpu-metal hxn-gpu-gles".
+    required: true
+  hl:
+    description: true to install stock HashLink as well as Ash.
+    default: "false"
+  web:
+    description: true to install the Emscripten SDK and node for browser runs.
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - if: runner.os != 'macOS'
+      uses: krdlab/setup-haxe@v1
+      with:
+        haxe-version: 4.3.6
+    # setup-haxe has no Haxe for arm64 macOS, which Homebrew has.
+    - if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew install haxe
+        mkdir -p "$HOME/haxelib" && haxelib setup "$HOME/haxelib"
+    # From git, whose Emscripten toolchain uses wasm exceptions and whose Windows
+    # build does not crash on exit after a collection.
+    - shell: bash
+      run: |
+        haxelib git hxcpp https://github.com/HaxeFoundation/hxcpp --quiet
+        dir="$(haxelib libpath hxcpp)"
+        git -C "$dir" checkout -q 615adc73d5ef28f3f74ea47977c39c4f25ce256d
+        (cd "$dir/tools/hxcpp" && haxe compile.hxml)
+    # The releases hxn-gpu supports, at their tags, and hxn-gpu from this checkout.
+    - shell: bash
+      run: |
+        haxelib install hxn 0.3.5 --always
+        haxelib install hxnsl 0.2.0 --always
+        for driver in ${{ inputs.drivers }}; do haxelib install "$driver" 0.2.0 --always; done
+        haxelib set hxn 0.3.5 --always
+        haxelib dev hxn-gpu .
+    - shell: bash
+      run: |
+        case "$RUNNER_OS" in
+          Linux) archive=ash-linux-x86_64.tar.gz ;;
+          macOS) archive=ash-macos-aarch64.tar.gz ;;
+          Windows) archive=ash-windows-x86_64.tar.gz ;;
+        esac
+        mkdir -p "$RUNNER_TEMP/ash"
+        # Extracted in place: tar reads a Windows path's drive as a host.
+        (cd "$RUNNER_TEMP/ash" && curl -fsSL "https://github.com/rayzor-blade/ash/releases/download/v0.1.19/$archive" | tar -xz)
+        echo "ASH=$RUNNER_TEMP/ash/ash" >> "$GITHUB_ENV"
+    - if: inputs.hl == 'true' && runner.os == 'Linux'
+      shell: bash
+      run: |
+        git clone --depth 1 --branch 1.15 https://github.com/HaxeFoundation/hashlink "$RUNNER_TEMP/hashlink"
+        make -C "$RUNNER_TEMP/hashlink" libhl hl
+        echo "HL=$RUNNER_TEMP/hashlink/hl" >> "$GITHUB_ENV"
+        echo "LD_LIBRARY_PATH=$RUNNER_TEMP/hashlink${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+    - if: inputs.hl == 'true' && runner.os == 'Windows'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        temp="$(cygpath -u "$RUNNER_TEMP")"
+        gh release download 1.15 --repo HaxeFoundation/hashlink --pattern '*-win.zip' --dir "$temp"
+        unzip -q "$temp"/*-win.zip -d "$temp/hl"
+        echo "HL=$(find "$temp/hl" -name hl.exe | head -1)" >> "$GITHUB_ENV"
+    - if: inputs.web == 'true'
+      shell: bash
+      run: |
+        git clone --depth 1 https://github.com/emscripten-core/emsdk "$RUNNER_TEMP/emsdk"
+        "$RUNNER_TEMP/emsdk/emsdk" install 5.0.7
+        "$RUNNER_TEMP/emsdk/emsdk" activate 5.0.7
+        # The script hxn runs an Ash web page with, from the hxn release hxn-gpu depends on.
+        curl -fsSL "https://raw.githubusercontent.com/hx-n/hxn/v0.3.5/crates/hxn-cli/src/ash_page.mjs" -o "$RUNNER_TEMP/ash_page.mjs"
+    - if: inputs.web == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22

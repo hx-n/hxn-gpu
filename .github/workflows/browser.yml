@@ -1,0 +1,97 @@
+name: Browser
+
+# The check in a web page in headless Chrome, with the GPU of the runner on
+# macOS and SwiftShader on Linux, compiled to wasm with hxcpp, with and without
+# threads, and served by emrun, and with Ash, threaded, and served by Ash's
+# page runner. Each build carries both browser drivers. It runs on WebGPU, on
+# WebGL2, and with WebGPU turned off, where it must fall back to WebGL2 and
+# warn.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: ${{ matrix.runtime }}, Chrome, ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        runtime: [hxcpp, hxcpp threaded, Ash]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          drivers: hxn-gpu-webgpu hxn-gpu-webgl2
+          web: "true"
+      - name: Build and run
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          # hxcpp uses a compiler set in CC or CXX instead of emcc.
+          unset CC CXX
+          if [ "$RUNNER_OS" = macOS ]; then
+            chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+            gpu="--enable-unsafe-webgpu"
+          else
+            chrome=google-chrome
+            gpu="--enable-unsafe-webgpu --enable-unsafe-swiftshader --use-webgpu-adapter=swiftshader --enable-features=Vulkan --use-vulkan=swiftshader --use-angle=swiftshader"
+          fi
+          libs="-lib hxn-gpu -lib hxn-gpu-webgpu -lib hxn-gpu-webgl2 -lib hxnsl -cp examples/check -main Main"
+          # build <directory> [defines...]: the check, for this job's runtime.
+          build() {
+            local dir=$1; shift
+            case "$RUNTIME" in
+              hxcpp) haxe $libs -cpp "$dir" -D emscripten -D disable_unicode_strings -D HXCPP_LINK_EMSCRIPTEN_EXT=.html -D HXCPP_LINK_EMRUN "$@" ;;
+              "hxcpp threaded") haxe $libs -cpp "$dir" -D emscripten -D hxn_threads -D disable_unicode_strings -D HXCPP_LINK_EMSCRIPTEN_EXT=.html -D HXCPP_LINK_EMRUN "$@" ;;
+              Ash)
+                haxe $libs -hl "$dir/main.hl" -D wasm -D hxn_threads "$@"
+                "$ASH" --build "$dir/main.wasm" --target wasm32-wasip1-threads --native-lib "$dir/libgpu_webgpu.a" --native-lib "$dir/libgpu_webgl2.a" "$dir/main.hl" ;;
+            esac
+          }
+          # page <directory> <chrome flags>: runs the built page, its output in page.txt.
+          page() {
+            local dir=$1 flags=$2
+            if [ "$RUNTIME" = Ash ]; then
+              # shellcheck disable=SC2086
+              node "$RUNNER_TEMP/ash_page.mjs" "$ASH" "$dir" "$chrome" $flags > page.txt 2>&1
+            else
+              local profile
+              profile="$(mktemp -d)"
+              # emrun runs from the page's directory, so its log paths are absolute.
+              emrun --browser chrome --browser_args="--headless=new --no-first-run --no-default-browser-check --user-data-dir=$profile $flags" \
+                --kill_start --kill_exit --timeout 300 --timeout-returncode 1 \
+                --log-stdout "$PWD/page.txt" --log-stderr "$PWD/page.txt" "$dir/Main.html" > /dev/null
+            fi
+            cat page.txt
+          }
+          status=0
+          # expect <backend>: the run opened it and every step printed its result.
+          expect() {
+            if ! grep -q "^device: $1" page.txt || ! grep -q '^render: 4x4 pixels of 64, 128, 191, 255' page.txt \
+              || ! grep -q '^textured: 4x4 pixels of 40, 80, 120, 255' page.txt || ! grep -q '^buffer: 16 values' page.txt \
+              || grep -q -E '^(failed|no GPU)' page.txt; then
+              echo "::error::$RUNTIME: expected the check to pass on $1"
+              status=1
+            fi
+          }
+          build out/default
+          build out/webgl2 -D hxn_gpu_backend=webgl2
+          echo "== WebGPU"; page out/default "$gpu"; expect webgpu
+          grep -q '^compute: 64 values' page.txt || { echo "::error::$RUNTIME: no compute on WebGPU"; status=1; }
+          echo "== WebGL2"; page out/webgl2 "$gpu"; expect webgl2
+          echo "== no WebGPU"; page out/default "$gpu --disable-features=WebGPUService"; expect webgl2
+          grep -q '^hxn-gpu: using webgl2, since webgpu failed to open' page.txt || { echo "::error::$RUNTIME: no fallback warning"; status=1; }
+          exit $status

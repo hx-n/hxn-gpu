@@ -1,0 +1,54 @@
+name: release
+
+# Builds the haxelib: hxn-gpu's Haxe sources, with no native library, since the
+# drivers carry those. A tag `v*` publishes it as a release asset and submits
+# it to haxelib; run by hand, it is a dry run that keeps the ZIP as an artifact.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  haxelib:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          version="$(jq -r .version haxelib.json)"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::haxelib.json is $version, the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+          zip -qr "hxn-gpu-$version.zip" haxelib.json extraParams.hxml src README.md LICENSE skills
+          echo "ZIP=hxn-gpu-$version.zip" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haxelib
+          path: ${{ env.ZIP }}
+
+  publish:
+    needs: haxelib
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: haxelib
+      - run: echo "ZIP=$(ls hxn-gpu-*.zip)" >> "$GITHUB_ENV"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "$ZIP" --title "$GITHUB_REF_NAME" --notes "$(jq -r .releasenote haxelib.json)"
+      - uses: krdlab/setup-haxe@v1
+        with:
+          haxe-version: 4.3.6
+      # haxelib accepts a new project only from its first contributor.
+      - env:
+          HAXELIB_PASSWORD: ${{ secrets.HAXELIB_PASSWORD }}
+        run: haxelib submit "$ZIP" darmie "$HAXELIB_PASSWORD" --never < /dev/null

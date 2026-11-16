@@ -1,0 +1,109 @@
+name: Native
+
+# The check on each native backend a runner has, under Ash (hybrid, JIT and
+# interpreter), stock HashLink where it builds, and hxcpp: Metal and GLES
+# through ANGLE on macOS; Vulkan and GLES on Mesa's software drivers on Linux,
+# with every Vulkan call checked by the validation layer; Direct3D 12 on WARP
+# or the runner's adapter, and GLES through ANGLE, on Windows.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: ${{ matrix.backends }}, ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            drivers: hxn-gpu-metal hxn-gpu-gles
+            backends: metal gles
+            hl: "false"
+          - os: ubuntu-latest
+            drivers: hxn-gpu-vulkan hxn-gpu-gles
+            backends: vulkan gles
+            hl: "true"
+          - os: windows-latest
+            drivers: hxn-gpu-d3d12 hxn-gpu-gles
+            backends: d3d12 gles
+            hl: "true"
+    env:
+      VK_INSTANCE_LAYERS: VK_LAYER_KHRONOS_validation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          drivers: ${{ matrix.drivers }}
+          hl: ${{ matrix.hl }}
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-validationlayers libegl1 libgles2 libegl-mesa0 libgl1-mesa-dri
+      # ANGLE's EGL and OpenGL ES, from Electron's release.
+      - if: runner.os == 'macOS'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dir="$RUNNER_TEMP/angle"
+          gh release download v43.8.3 --repo electron/electron --pattern 'electron-v43.8.3-darwin-arm64.zip' --dir "$dir"
+          libs='Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries'
+          unzip -q -j "$dir"/electron-*.zip "$libs/libEGL.dylib" "$libs/libGLESv2.dylib" -d "$dir"
+          echo "HXN_GPU_GLES_EGL=$dir/libEGL.dylib" >> "$GITHUB_ENV"
+      - if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dir="$(cygpath -u "$RUNNER_TEMP")/angle"
+          gh release download v43.8.3 --repo electron/electron --pattern 'electron-v43.8.3-win32-x64.zip' --dir "$dir"
+          7z e -y -o"$(cygpath -w "$dir")" "$(cygpath -w "$(ls "$dir"/electron-*.zip)")" libEGL.dll libGLESv2.dll > /dev/null
+          echo "HXN_GPU_GLES_EGL=$(cygpath -w "$dir/libEGL.dll")" >> "$GITHUB_ENV"
+      - name: Build
+        run: |
+          libs="-lib hxn-gpu -lib hxnsl"
+          for driver in ${{ matrix.drivers }}; do libs="$libs -lib $driver"; done
+          haxe $libs -cp examples/check -main Main -hl out/hl/main.hl
+          haxe $libs -cp examples/check -main Main -cpp out/cpp
+      # Fails on a backend that does not open or a result line that is missing, rather
+      # than passing on what the check prints without a device, and on any Vulkan error.
+      - name: Run each backend
+        run: |
+          main=out/cpp/Main
+          [ "$RUNNER_OS" = Windows ] && main=out/cpp/Main.exe
+          status=0
+          # run <backend> <directory> <command...>: runs the check there and checks what it printed.
+          run() {
+            local backend=$1 dir=$2; shift 2
+            echo "== $backend: $*"
+            (cd "$dir" && HXN_GPU_BACKEND=$backend "$@") > run.txt 2>&1
+            local code=$?
+            cat run.txt
+            if [ $code -ne 0 ] \
+              || ! grep -q "^device: $backend" run.txt \
+              || ! grep -q '^render: 4x4 pixels of 64, 128, 191, 255' run.txt \
+              || ! grep -q '^buffer: 16 values written and read back' run.txt \
+              || grep -q -E '^(failed|no GPU)' run.txt \
+              || grep -q 'Validation Error' run.txt; then
+              echo "::error::$backend failed under $*"
+              status=1
+            fi
+          }
+          for backend in ${{ matrix.backends }}; do
+            run $backend out/hl "$ASH" main.hl
+            run $backend out/hl "$ASH" --mode jit main.hl
+            run $backend out/hl "$ASH" --mode interp main.hl
+            if [ -n "${HL:-}" ]; then run $backend out/hl "$HL" main.hl; fi
+            run $backend . "$main"
+          done
+          exit $status
