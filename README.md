@@ -210,8 +210,10 @@ with `then`: `await` blocks the thread the browser settles them on.
 The check renders, computes, samples a texture and reads a buffer back on each
 backend the machine has, and prints the same lines everywhere. A step whose
 feature a device lacks prints that it was skipped. The present example draws
-three frames to an hxn-window window, or in a web page to its canvas, and
-reads the last back where the backend can.
+three frames to an hxn-window window on every platform, using its physical
+pixel size and resize events, and reads the last back where the backend can.
+`SurfaceTargets.ofWindow` maps browser windows to the canvas target; the window
+keeps DOM input and sizing while the GPU driver owns rendering.
 
 ```
 haxe -lib hxn-gpu -lib hxn-gpu-metal -lib hxnsl -cp examples/check -main Main -hl out/main.hl

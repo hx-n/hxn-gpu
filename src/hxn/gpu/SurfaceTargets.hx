@@ -9,8 +9,11 @@ typedef NativeWindow = {
 }
 
 class SurfaceTargets {
-	/** The surface target of `window`, an hxn-window window. **/
+	/** The surface target of `window`, including a browser canvas window. **/
 	public static function ofWindow(window:NativeWindow):SurfaceTarget {
-		return Window(window.platform(), [for (i in 0...4) window.raw(i)]);
+		return switch window.platform() {
+			case 7 | 8: Canvas;
+			case platform: Window(platform, [for (i in 0...4) window.raw(i)]);
+		}
 	}
 }

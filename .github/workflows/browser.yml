@@ -57,12 +57,17 @@ jobs:
           build() {
             local example=$1 dir=$2; shift 2
             local libs="$libs -cp examples/$example -main Main"
+            local window=()
+            if [ "$example" = present ]; then
+              libs="$libs -lib hxn-window"
+              window=(--native-lib "$dir/libxwindow.a")
+            fi
             case "$RUNTIME" in
               hxcpp) haxe $libs -cpp "$dir" -D emscripten -D disable_unicode_strings -D HXCPP_LINK_EMSCRIPTEN_EXT=.html -D HXCPP_LINK_EMRUN "$@" ;;
               "hxcpp threaded") haxe $libs -cpp "$dir" -D emscripten -D hxn_threads -D disable_unicode_strings -D HXCPP_LINK_EMSCRIPTEN_EXT=.html -D HXCPP_LINK_EMRUN "$@" ;;
               Ash)
                 haxe $libs -hl "$dir/main.hl" -D wasm -D hxn_threads "$@"
-                "$ASH" --build "$dir/main.wasm" --target wasm32-wasip1-threads --native-lib "$dir/libgpu_webgpu.a" --native-lib "$dir/libgpu_webgl2.a" "$dir/main.hl" ;;
+                "$ASH" --build "$dir/main.wasm" --target wasm32-wasip1-threads --native-lib "$dir/libgpu_webgpu.a" --native-lib "$dir/libgpu_webgl2.a" "${window[@]}" "$dir/main.hl" ;;
             esac
           }
           # page <directory> <chrome flags>: runs the built page, its output in page.txt.

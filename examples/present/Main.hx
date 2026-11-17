@@ -19,9 +19,6 @@ class Main {
 	}
 
 	static function main() {
-		#if (emscripten || wasm)
-		var target:SurfaceTarget = Canvas;
-		#else
 		var attributes = new hxn.window.WindowAttributes();
 		attributes.title("hxn-gpu present");
 		attributes.width(SIZE);
@@ -29,17 +26,18 @@ class Main {
 		var window = hxn.window.Window.open(attributes);
 		attributes.close();
 		var target = SurfaceTargets.ofWindow(window);
-		#end
 		GpuDevice.open({surface: target, required: [Presentation]}).then(device -> {
 			Sys.println('device: ${device.backend}');
 			var surface = device.createSurface(target);
-			surface.configure(SIZE, SIZE, surface.preferredFormat(), false);
+			surface.configure(window.width(), window.height(), surface.preferredFormat(), false);
 			var shader = device.createShader(Tinted);
 			var pipeline = device.createRenderPipeline({
 				shader: shader,
 				format: surface.format,
 				topology: TriangleStrip,
-				vertexBuffers: [{stride: 8, attributes: [{location: Tinted.INPUT_position, format: Float32x2, offset: 0}]}]
+				vertexBuffers: [
+					{stride: 8, attributes: [{location: Tinted.INPUT_position, format: Float32x2, offset: 0}]}
+				]
 			});
 			var corners = [-0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5];
 			var quad = Bytes.alloc(corners.length * 4);
@@ -53,10 +51,24 @@ class Main {
 			var group = device.createBindGroup({pipeline: pipeline, group: Tinted.PARAMS_GROUP, entries: [{binding: Tinted.PARAMS_BINDING, buffer: uniforms}]});
 			var colors = [[0.0, 0.0, 1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]];
 			function frame(i:Int) {
+				while (true) {
+					switch window.poll() {
+						case Resized(_, _):
+							surface.configure(window.width(), window.height(), surface.preferredFormat(), false);
+						case None:
+							break;
+						case _:
+					}
+				}
 				var c = colors[i];
 				var texture = surface.currentTexture();
 				var encoder = device.createCommandEncoder();
-				var pass = encoder.beginRenderPass(texture, {r: c[0], g: c[1], b: c[2], a: 1});
+				var pass = encoder.beginRenderPass(texture, {
+					r: c[0],
+					g: c[1],
+					b: c[2],
+					a: 1
+				});
 				pass.setPipeline(pipeline);
 				pass.setBindGroup(Tinted.PARAMS_GROUP, group);
 				pass.setVertexBuffer(0, positions);
@@ -72,9 +84,7 @@ class Main {
 							for (o in ([group, uniforms, positions, pipeline, shader, surface] : Array<Resource>))
 								o.close();
 							device.close();
-							#if !(emscripten || wasm)
 							window.close();
-							#end
 						}, failed);
 				}
 				if (i + 1 < colors.length || device.backend == Metal) {
