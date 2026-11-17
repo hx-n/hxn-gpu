@@ -12,7 +12,7 @@
   "releasenote": "Documents await in a threaded browser build under Ash from 0.1.21, as under hxcpp. No code changes.",
   "classPath": "src",
   "dependencies": {
-    "hxn": "0.3.6",
+    "hxn": "0.3.7",
     "hxnsl": "0.2.0"
   }
 }

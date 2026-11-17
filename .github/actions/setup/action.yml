@@ -36,11 +36,11 @@ runs:
     # The releases hxn-gpu supports, at their tags, and hxn-gpu from this checkout.
     - shell: bash
       run: |
-        haxelib install hxn 0.3.6 --always
+        haxelib install hxn 0.3.7 --always
         haxelib install hxnsl 0.2.0 --always
         for driver in ${{ inputs.drivers }}; do haxelib install "${driver%%:*}" "${driver##*:}" --always; done
-        haxelib install hxn-window 0.2.0 --always
-        haxelib set hxn 0.3.6 --always
+        haxelib install hxn-window 0.2.1 --always
+        haxelib set hxn 0.3.7 --always
         haxelib dev hxn-gpu .
     - shell: bash
       run: |
@@ -76,7 +76,7 @@ runs:
         "$RUNNER_TEMP/emsdk/emsdk" install 5.0.7
         "$RUNNER_TEMP/emsdk/emsdk" activate 5.0.7
         # The script hxn runs an Ash web page with, from the hxn release hxn-gpu depends on.
-        curl -fsSL "https://raw.githubusercontent.com/hx-n/hxn/v0.3.6/crates/hxn-cli/src/ash_page.mjs" -o "$RUNNER_TEMP/ash_page.mjs"
+        curl -fsSL "https://raw.githubusercontent.com/hx-n/hxn/v0.3.7/crates/hxn-cli/src/ash_page.mjs" -o "$RUNNER_TEMP/ash_page.mjs"
     - if: inputs.web == 'true'
       uses: actions/setup-node@v4
       with:
