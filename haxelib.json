@@ -1,6 +1,6 @@
 {
   "name": "hxn-gpu",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "One GPU API for Haxe over the hxn GPU drivers: Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, with features and limits per device",
   "url": "https://github.com/hx-n/hxn-gpu",
   "license": "Apache",
@@ -9,7 +9,7 @@
     "darmie",
     "rayzor"
   ],
-  "releasenote": "Documents await in a threaded browser build under Ash from 0.1.21, as under hxcpp. No code changes.",
+  "releasenote": "Browser presentation uses hxn-window for canvas sizing and input on Ash wasm and Emscripten. SurfaceTargets.ofWindow accepts native and browser windows.",
   "classPath": "src",
   "dependencies": {
     "hxn": "0.3.7",
