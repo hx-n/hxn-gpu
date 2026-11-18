@@ -89,3 +89,6 @@ Generated adapters deliver native records after calls return. Custom frame loops
 call `hxn.Loop.sync()`; otherwise idle background diagnostics need `hxn.Log.flush()`.
 Keep real-time callbacks free of logging and leave returned errors as exceptions.
 Read the [core logging contract](https://github.com/hx-n/hxn/blob/main/docs/design/logging.md).
+
+Mac native and browser CI use macOS 15 and consume released driver
+haxelibs.

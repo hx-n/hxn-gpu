@@ -27,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-15
             drivers: hxn-gpu-metal:0.2.1 hxn-gpu-gles:0.3.0
             backends: metal gles
             hl: "false"
