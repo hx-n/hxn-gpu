@@ -17,13 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: test -s third-party/NOTICES.md
       - run: |
           version="$(jq -r .version haxelib.json)"
           if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ "v$version" != "$GITHUB_REF_NAME" ]; then
             echo "::error::haxelib.json is $version, the tag is $GITHUB_REF_NAME"
             exit 1
           fi
-          zip -qr "hxn-gpu-$version.zip" haxelib.json extraParams.hxml src README.md LICENSE skills
+          zip -qr "hxn-gpu-$version.zip" haxelib.json extraParams.hxml src README.md LICENSE skills third-party
           echo "ZIP=hxn-gpu-$version.zip" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         with:
