@@ -50,7 +50,7 @@ returns the first that initializes:
 To change the order, pass `backends` to `open`, set `HXN_GPU_BACKEND` when
 the program runs, or compile with `-D hxn_gpu_backend`. Each takes a list, such
 as `vulkan,gles`. When a backend fails to open and a later one is used, `open`
-prints a warning to standard error, which a web page shows in its console. A
+logs a warning through `hxn.Log` with target `hxn.gpu`. A
 browser without WebGPU therefore falls back to WebGL2 and says why.
 
 ```haxe
@@ -239,3 +239,10 @@ Licensed under Apache-2.0. See [LICENSE](LICENSE).
 Dependency licenses and redistribution notices are in
 [third-party/NOTICES.md](https://github.com/hx-n/hxn-gpu/blob/main/third-party/NOTICES.md). Retain the applicable
 notices when redistributing binaries.
+
+## Logging
+
+Diagnostics use core `hxn.Log` with target `hxn.gpu`. The application
+can set `Log.level` and `Log.sink` to capture Haxe and native records together.
+Custom frame loops drain them with `hxn.Loop.sync()`; idle background work
+needs an application-driven `hxn.Log.flush()`.

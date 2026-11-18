@@ -9,6 +9,7 @@ import hxnsl.Layout.LayoutEntry;
 typedef OpenOptions = {
 	/** Features the device must have. Backends without them are skipped. **/
 	final ?required:Features;
+
 	/**
 		The backends to try, in order. Overrides `HXN_GPU_BACKEND`,
 		`-D hxn_gpu_backend` and the platform's default order, which
@@ -18,8 +19,8 @@ typedef OpenOptions = {
 
 	/**
 		Receives the warning `open` gives when a backend fails to open and a
-		later one is used. By default it goes to standard error, which a web
-		page shows in its console. Pass `_ -> {}` to drop it.
+		later one is used. By default it goes through `hxn.Log` with target
+		`hxn.gpu`. Pass `_ -> {}` to drop it.
 	**/
 	final ?warn:String->Void;
 
@@ -66,12 +67,14 @@ class GpuDevice {
 		#end
 	];
 
-
 	public final backend:Backend;
+
 	/** The adapter's name, as the driver reports it. **/
 	public final adapter:String;
+
 	public final features:Features;
 	public final limits:Limits;
+
 	@:allow(hxn.gpu) final driver:Driver;
 	var closed = false;
 
@@ -105,7 +108,7 @@ class GpuDevice {
 	}
 
 	static function warning(message:String):Void {
-		Sys.stderr().writeString(message + "\n");
+		hxn.Log.warn(message, "hxn.gpu");
 	}
 
 	static function platformOrder():Array<Backend> {
