@@ -198,8 +198,8 @@ class VulkanDriver implements Driver {
 		(cast buffer.native : NativeBuffer).write(offset, bytes);
 	}
 
-	// Copies through a staging buffer, in its own submission, so the write lands before the
-	// work submitted after it.
+	// Copies the bytes through a staging buffer in a submission of their own, so the
+	// write takes effect before the work submitted after it.
 	public function writeTexture(texture:Texture, region:hxn.gpu.Descriptors.TextureRegion, bytes:Bytes, bytesPerRow:Int):Void {
 		var pixel = texture.format.bytesPerPixel();
 		var row = region.width * pixel;

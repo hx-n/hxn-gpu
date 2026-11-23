@@ -45,7 +45,7 @@ import hxn.gpu.webgl2.Shaders as GlShaders;
 private class Program {
 	public final program:NativeProgram;
 	public final bindings:Bindings;
-	// The pipeline's blend state, which GL sets when the pipeline is bound.
+	// GL sets the pipeline's blend state when the pipeline is bound.
 	public final blend:NativeBlend;
 
 	public function new(program:NativeProgram, bindings:Bindings, blend:NativeBlend) {
@@ -59,9 +59,10 @@ private class Program {
 }
 
 /**
-	The native of a surface: the texture its frames are rendered into. GLSL from hxnsl
-	flips clip space for textures, so `present` copies the frame into the window's
-	framebuffer, whose origin is the bottom left, with its rows reversed.
+	`GlSurface` is the native object of a surface. It holds the texture that the
+	surface's frames are drawn into. GLSL from hxnsl flips clip space, and the
+	window's framebuffer has its origin at the bottom left, so `present` copies the
+	frame into the window with its rows reversed.
 **/
 private class GlSurface {
 	public var frame:Null<NativeTexture>;
@@ -76,7 +77,10 @@ private class GlSurface {
 	}
 }
 
-/** The native of a window frame: the surface's texture, which the surface closes. **/
+/**
+	`SurfaceFrame` is the native object of a window frame. It refers to the
+	surface's texture, which the surface closes.
+**/
 private class SurfaceFrame {
 	public final texture:NativeTexture;
 

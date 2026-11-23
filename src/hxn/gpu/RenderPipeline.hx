@@ -12,7 +12,7 @@ class RenderPipeline extends Pipeline {
 	public final topology:Topology;
 	public final vertexBuffers:Array<VertexBufferLayout>;
 
-	/** How it blends into the target, or null to write its color as it is. **/
+	/** The blend state, or null when the pipeline writes its color as it is. **/
 	public final blend:Null<BlendState>;
 
 	@:allow(hxn.gpu) function new(device:GpuDevice, shader:ShaderModule, vertex:EntryPoint, fragment:EntryPoint, format:TextureFormat, topology:Topology,
@@ -27,10 +27,11 @@ class RenderPipeline extends Pipeline {
 	}
 
 	/**
-		The blend state as the drivers take it: whether blending is on, then
-		the operation and the source and destination factors of the color,
-		then of the alpha, with WebGPU's defaults filled in. `Min` and `Max`
-		default both factors to `One`, the only factor they take.
+		Returns the blend state in the form that the drivers take. The first
+		code is 1 when blending is on. Then come the operation and the source
+		and destination factors of the color, and then those of the alpha.
+		Fields that are left out take WebGPU's defaults. `Min` and `Max` take
+		both factors as `One`, because they accept no other factor.
 	**/
 	@:allow(hxn.gpu)
 	function blendCodes():Array<Int> {

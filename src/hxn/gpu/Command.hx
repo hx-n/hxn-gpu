@@ -9,9 +9,9 @@ enum Command {
 	SetBindGroup(index:Int, group:BindGroup);
 	SetVertexBuffer(slot:Int, buffer:Buffer, offset:Int);
 	SetIndexBuffer(buffer:Buffer, format:IndexFormat);
-	/** In pixels from the target's top-left corner. **/
+	/** The rectangle is in pixels from the target's top-left corner. **/
 	SetViewport(x:Float, y:Float, width:Float, height:Float);
-	/** In pixels from the target's top-left corner. **/
+	/** The rectangle is in pixels from the target's top-left corner. **/
 	SetScissor(x:Int, y:Int, width:Int, height:Int);
 	Dispatch(x:Int, y:Int, z:Int);
 	Draw(vertices:Int, instances:Int, firstVertex:Int);
@@ -22,9 +22,9 @@ enum Command {
 enum Step {
 	ComputeStep(commands:Array<Command>);
 	/**
-		One render pass, which clears `target` to `clear` first, or with `clear` null draws
-		over what it holds. Each pass starts with the viewport and scissor covering the
-		whole target.
+		Records one render pass. The pass first clears `target` to `clear`, or
+		draws over what `target` holds when `clear` is null. Each pass starts
+		with a viewport and a scissor that cover the whole target.
 	**/
 	RenderStep(target:Texture, clear:Null<Color>, commands:Array<Command>);
 	CopyStep(source:Buffer, sourceOffset:Int, destination:Buffer, destinationOffset:Int, size:Int);

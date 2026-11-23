@@ -136,7 +136,8 @@ class Main {
 		});
 	}
 
-	// A half-transparent red quad over a blue target, with `Blend.alpha`: half red, half blue, opaque.
+	// The check draws a half-transparent red quad over a blue target with `Blend.alpha`. The result
+	// is half red, half blue and opaque.
 	static function blended(device:GpuDevice, next:() -> Void) {
 		var shader = device.createShader(Tinted);
 		var pipeline = device.createRenderPipeline({
@@ -268,7 +269,8 @@ class Main {
 			blue.set(i * 4 + 3, 255);
 		}
 		device.writeTexture(image, blue);
-		// Two rows of two red pixels, the first padded with a green one.
+		// The bytes hold two rows of two red pixels. The first row ends with a green
+		// pixel as padding.
 		var red = Bytes.alloc(12 + 8);
 		for (i in [0, 1, 3, 4]) {
 			red.set(i * 4, 255);
@@ -343,7 +345,7 @@ class Main {
 			]
 		});
 		var corners = floats(device, [-1, -1, 1, -1, -1, 1, 1, 1]);
-		// Two instances: green, then red. The pass reads from the second.
+		// The buffer holds two instances, green and then red. The pass reads from the second.
 		var instances = floats(device, [0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1]);
 		var target = device.createTexture({width: 4, height: 4, format: Rgba8Unorm, usage: RenderTarget});
 

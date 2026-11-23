@@ -263,7 +263,8 @@ class D3D12Driver implements Driver {
 		run(commands).then(_ -> staging.close(), _ -> staging.close());
 	}
 
-	// Direct3D 12 copies rows 256 bytes apart, so the rows are staged at that pitch.
+	// Direct3D 12 copies texture rows that are 256 bytes apart, so the staging buffer
+	// holds the rows at that pitch.
 	public function writeTexture(texture:Texture, region:hxn.gpu.Descriptors.TextureRegion, bytes:Bytes, bytesPerRow:Int):Void {
 		var native:NativeTexture = cast texture.native;
 		var row = region.width * texture.format.bytesPerPixel();

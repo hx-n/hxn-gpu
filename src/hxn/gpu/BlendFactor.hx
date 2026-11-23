@@ -1,10 +1,10 @@
 package hxn.gpu;
 
 /**
-	What a blend multiplies the source or the destination by, as WebGPU's
-	`GPUBlendFactor`. "Src" is the color the fragment shader writes, and "Dst"
-	the color already in the target. The values are the ones every driver
-	takes.
+	`BlendFactor` sets what a blend multiplies the source or the destination
+	by, as WebGPU's `GPUBlendFactor` does. "Src" is the color that the
+	fragment shader writes, and "Dst" is the color already in the target.
+	Every driver takes these values.
 **/
 enum abstract BlendFactor(Int) to Int {
 	var Zero = 0;
@@ -17,6 +17,9 @@ enum abstract BlendFactor(Int) to Int {
 	var OneMinusDst = 7;
 	var DstAlpha = 8;
 	var OneMinusDstAlpha = 9;
-	/** The smaller of the source alpha and one minus the destination alpha, for color; one for alpha. **/
+	/**
+		For the color, the smaller of the source alpha and one minus the
+		destination alpha. For the alpha, one.
+	**/
 	var SrcAlphaSaturated = 10;
 }

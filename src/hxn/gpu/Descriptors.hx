@@ -16,7 +16,7 @@ typedef TextureDescriptor = {
 	final usage:TextureUsage;
 }
 
-/** A rectangle of a texture in pixels, from its top-left corner. **/
+/** `TextureRegion` is a rectangle of a texture, in pixels from the texture's top-left corner. **/
 typedef TextureRegion = {
 	final x:Int;
 	final y:Int;
@@ -54,9 +54,11 @@ typedef VertexBufferLayout = {
 }
 
 /**
-	One half of a blend state: how the color, or the alpha, of what a
-	pipeline draws combines with the target's. The defaults are WebGPU's:
-	`Add`, with the source factor `One` and the destination factor `Zero`.
+	Each blend state has two components, one for the color and one for the
+	alpha. Each component sets how the color or the alpha that a pipeline
+	draws combines with the one already in the target. Fields that are left
+	out take WebGPU's defaults: the operation `Add`, the source factor `One`
+	and the destination factor `Zero`.
 **/
 typedef BlendComponent = {
 	final ?operation:BlendOperation;
@@ -64,7 +66,10 @@ typedef BlendComponent = {
 	final ?dstFactor:BlendFactor;
 }
 
-/** How a pipeline blends into its color target, as WebGPU's `GPUBlendState`. **/
+/**
+	`BlendState` sets how a pipeline blends into its color target, as WebGPU's
+	`GPUBlendState` does.
+**/
 typedef BlendState = {
 	final color:BlendComponent;
 	final alpha:BlendComponent;
@@ -81,7 +86,10 @@ typedef RenderPipelineDescriptor = {
 	/** Vertex buffer layouts by slot. More than one needs `MultipleVertexBuffers`. **/
 	final ?vertexBuffers:Array<VertexBufferLayout>;
 	final ?constants:Array<{key:String, value:Float}>;
-	/** How it blends into the target, such as `Blend.alpha`. Without one, it writes its color as it is. **/
+	/**
+		The blend state, such as `Blend.alpha`. Without it, the pipeline writes
+		its color as it is.
+	**/
 	final ?blend:BlendState;
 }
 
