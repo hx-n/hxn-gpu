@@ -3,7 +3,7 @@ description: Haxe, hxcpp, a HashLink VM or Ash, and the released haxelibs hxn-gp
 
 inputs:
   drivers:
-    description: The driver haxelibs to install at their versions, such as "hxn-gpu-metal:0.2.1 hxn-gpu-gles:0.3.0".
+    description: The driver haxelibs to install at their versions, such as "hxn-gpu-metal:0.2.2 hxn-gpu-gles:0.3.2".
     required: true
   hl:
     description: true to install stock HashLink as well as Ash.
@@ -51,7 +51,7 @@ runs:
         esac
         mkdir -p "$RUNNER_TEMP/ash"
         # Extracted in place: tar reads a Windows path's drive as a host.
-        (cd "$RUNNER_TEMP/ash" && curl -fsSL "https://github.com/rayzor-blade/ash/releases/download/v0.1.21/$archive" | tar -xz)
+        (cd "$RUNNER_TEMP/ash" && curl -fsSL "https://github.com/rayzor-blade/ash/releases/download/v0.1.22/$archive" | tar -xz)
         echo "ASH=$RUNNER_TEMP/ash/ash" >> "$GITHUB_ENV"
     - if: inputs.hl == 'true' && runner.os == 'Linux'
       shell: bash
