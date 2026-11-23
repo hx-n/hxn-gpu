@@ -258,9 +258,14 @@ class GpuDevice {
 			need(InstanceVertexBuffers, "a vertex buffer read per instance");
 		if (buffers.length > limits.maxVertexBuffers)
 			throw 'a pipeline has at most ${limits.maxVertexBuffers} vertex buffers';
+		if (d.blend != null)
+			for (c in [d.blend.color, d.blend.alpha])
+				if ((c.operation == Min || c.operation == Max)
+					&& ((c.srcFactor != null && c.srcFactor != One) || (c.dstFactor != null && c.dstFactor != One)))
+					throw "a blend with the operation Min or Max takes the factor One for its source and its destination";
 		var shader = d.shader;
 		var pipeline = new RenderPipeline(this, shader, shader.entryPoint(d.vertexEntryPoint, "vertex"), shader.entryPoint(d.fragmentEntryPoint, "fragment"),
-			d.format, d.topology != null ? d.topology : TriangleList, buffers, constantsOf(d.constants));
+			d.format, d.topology != null ? d.topology : TriangleList, buffers, constantsOf(d.constants), d.blend);
 		driver.createRenderPipeline(pipeline);
 		return pipeline;
 	}

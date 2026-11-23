@@ -28,7 +28,7 @@ class Main {
 		GpuDevice.open().then(device -> {
 			Sys.println('device: ${device.backend}');
 			Sys.println('features: ${device.features}');
-			compute(device, () -> render(device, () -> textured(device, () -> roundTrip(device, () -> device.close()))));
+			compute(device, () -> render(device, () -> blended(device, () -> textured(device, () -> roundTrip(device, () -> device.close())))));
 		}, e -> {
 			Sys.println('no GPU: ${e.message}');
 			hxn.Loop.exit(1);
@@ -73,12 +73,12 @@ class Main {
 		return device.createBuffer({size: bytes.length, usage: Vertex, contents: bytes});
 	}
 
-	/** Reads `target` back and checks every pixel is `expected`. **/
-	static function readTarget(device:GpuDevice, target:Texture, expected:Array<Int>, label:String, next:() -> Void) {
+	/** Reads `target` back and checks every pixel is `expected`, within `tolerance`. **/
+	static function readTarget(device:GpuDevice, target:Texture, expected:Array<Int>, label:String, next:() -> Void, tolerance = 0) {
 		device.readTexture(target).then(pixels -> {
 			for (p in 0...target.width * target.height)
 				for (c in 0...4)
-					check(pixels.get(p * 4 + c) == expected[c], '$label: pixel $p channel $c is ${pixels.get(p * 4 + c)}, not ${expected[c]}');
+					check(Math.abs(pixels.get(p * 4 + c) - expected[c]) <= tolerance, '$label: pixel $p channel $c is ${pixels.get(p * 4 + c)}, not ${expected[c]}');
 			Sys.println('$label: ${target.width}x${target.height} pixels of ${[for (c in 0...4) pixels.get(c)].join(", ")}');
 			next();
 		}, failed);
@@ -113,6 +113,39 @@ class Main {
 			closeAll([group, uniforms, positions, target, pipeline, shader]);
 			next();
 		});
+	}
+
+	// A half-transparent red quad over a blue target, with `Blend.alpha`: half red, half blue, opaque.
+	static function blended(device:GpuDevice, next:() -> Void) {
+		var shader = device.createShader(Tinted);
+		var pipeline = device.createRenderPipeline({
+			shader: shader,
+			format: Rgba8Unorm,
+			topology: TriangleStrip,
+			vertexBuffers: [{stride: 8, attributes: [{location: Tinted.INPUT_position, format: Float32x2, offset: 0}]}],
+			blend: Blend.alpha
+		});
+		var target = device.createTexture({width: 4, height: 4, format: Rgba8Unorm, usage: RenderTarget});
+		var positions = floats(device, [-1, -1, 1, -1, -1, 1, 1, 1]);
+		var params = Bytes.alloc(Tinted.PARAMS_SIZE);
+		var tint = [1.0, 0.0, 0.0, 0.5];
+		for (i in 0...4)
+			params.setFloat(Tinted.PARAMS_tint + i * 4, tint[i]);
+		var uniforms = device.createBuffer({size: params.length, usage: Uniform, contents: params});
+		var group = device.createBindGroup({pipeline: pipeline, group: Tinted.PARAMS_GROUP, entries: [{binding: Tinted.PARAMS_BINDING, buffer: uniforms}]});
+
+		var encoder = device.createCommandEncoder();
+		var pass = encoder.beginRenderPass(target, {r: 0, g: 0, b: 1, a: 1});
+		pass.setPipeline(pipeline);
+		pass.setBindGroup(Tinted.PARAMS_GROUP, group);
+		pass.setVertexBuffer(0, positions);
+		pass.draw(4);
+		pass.end();
+		device.submit(encoder);
+		readTarget(device, target, [128, 0, 128, 255], "blend", () -> {
+			closeAll([group, uniforms, positions, target, pipeline, shader]);
+			next();
+		}, 1);
 	}
 
 	static function textured(device:GpuDevice, next:() -> Void) {

@@ -121,8 +121,17 @@ class WebGPUDriver implements Driver {
 			for (a in buffer.attributes)
 				({location: a.location, format: vertexFormat(a.format), offset: a.offset} : hxn.gpu.webgpu.VertexAttribute)
 		];
+		var b = @:privateAccess pipeline.blendCodes();
 		pipeline.native = device.createRenderPipeline(program.module, pipeline.vertex.name, pipeline.fragment.name, program.layout,
-			format(pipeline.format), topology(pipeline.topology), buffer == null ? 0 : buffer.stride, attributes, constants(pipeline));
+			format(pipeline.format), topology(pipeline.topology), buffer == null ? 0 : buffer.stride, attributes, constants(pipeline), {
+				enabled: b[0] == 1,
+				colorOperation: b[1],
+				colorSource: b[2],
+				colorDestination: b[3],
+				alphaOperation: b[4],
+				alphaSource: b[5],
+				alphaDestination: b[6]
+			});
 	}
 
 	public function createBindGroup(group:BindGroup):Void {

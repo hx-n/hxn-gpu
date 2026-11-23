@@ -163,8 +163,17 @@ class MetalDriver implements Driver {
 				});
 			layouts.push({buffer: VERTEX_BUFFERS - slot, stride: buffer.stride, perInstance: buffer.perInstance == true});
 		}
+		var b = @:privateAccess pipeline.blendCodes();
 		pipeline.native = device.newRenderPipeline(program.named(pipeline.vertex.name), program.named(pipeline.fragment.name), format(pipeline.format),
-			attributes, layouts);
+			attributes, layouts, {
+				enabled: b[0] == 1,
+				colorOperation: b[1],
+				colorSource: b[2],
+				colorDestination: b[3],
+				alphaOperation: b[4],
+				alphaSource: b[5],
+				alphaDestination: b[6]
+			});
 	}
 
 	public function createBindGroup(group:BindGroup):Void {

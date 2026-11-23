@@ -169,6 +169,41 @@ var group = device.createBindGroup({pipeline: pipeline, group: Tinted.PARAMS_GRO
 A bind group is created for a pipeline's shader, and its entries follow the
 shader's `LAYOUT`.
 
+### Blending
+
+Without a blend state, a pipeline writes its color as it is. With one, it
+blends the color into the target's, as WebGPU's `GPUBlendState` does, on
+every backend:
+
+```haxe
+var pipeline = device.createRenderPipeline({
+	shader: shader,
+	format: Rgba8Unorm,
+	blend: Blend.alpha
+});
+```
+
+| Preset | Color |
+|---|---|
+| `Blend.alpha` | source × source alpha + destination × (1 − source alpha), for colors not multiplied by their alpha |
+| `Blend.premultiplied` | source + destination × (1 − source alpha), for colors already multiplied by their alpha |
+| `Blend.additive` | source × source alpha + destination, for light and glow |
+
+Each full blend state sets the operation and the two factors of the color
+and of the alpha, with WebGPU's defaults (`Add`, `One`, `Zero`) for what it
+leaves out:
+
+```haxe
+blend: {
+	color: {operation: Add, srcFactor: Dst, dstFactor: Zero},
+	alpha: {operation: Add, srcFactor: One, dstFactor: OneMinusSrcAlpha}
+}
+```
+
+`BlendFactor` and `BlendOperation` have WebGPU's values. `Min` and `Max`
+take only the factor `One`, and anything else is an error when the pipeline
+is created.
+
 ## Commands and results
 
 A `CommandEncoder` records compute passes, render passes and buffer copies;

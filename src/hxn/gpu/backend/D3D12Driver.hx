@@ -205,8 +205,18 @@ class D3D12Driver implements Driver {
 					format: vertexFormat(a.format),
 					offset: a.offset
 				});
+		var b = @:privateAccess pipeline.blendCodes();
 		pipeline.native = device.createGraphicsPipeline(bytecode(pipeline.shader, pipeline.vertex.name, "vertex"),
-			bytecode(pipeline.shader, pipeline.fragment.name, "fragment"), program.signature, format(pipeline.format), topology(pipeline.topology), attributes);
+			bytecode(pipeline.shader, pipeline.fragment.name, "fragment"), program.signature, format(pipeline.format), topology(pipeline.topology), attributes,
+			{
+				enabled: b[0] == 1,
+				colorOperation: b[1],
+				colorSource: b[2],
+				colorDestination: b[3],
+				alphaOperation: b[4],
+				alphaSource: b[5],
+				alphaDestination: b[6]
+			});
 	}
 
 	public function createBindGroup(group:BindGroup):Void {

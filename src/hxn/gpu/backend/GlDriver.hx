@@ -13,6 +13,7 @@ import hxn.gpu.gles.ComponentType;
 import hxn.gpu.gles.Context;
 import hxn.gpu.gles.Display;
 import hxn.gpu.gles.Primitive;
+import hxn.gpu.gles.Blend as NativeBlend;
 import hxn.gpu.gles.Program as NativeProgram;
 import hxn.gpu.gles.Sampler as NativeSampler;
 import hxn.gpu.gles.Texture as NativeTexture;
@@ -29,6 +30,7 @@ import hxn.gpu.webgl2.ClearBits;
 import hxn.gpu.webgl2.ComponentType;
 import hxn.gpu.webgl2.Context;
 import hxn.gpu.webgl2.Primitive;
+import hxn.gpu.webgl2.Blend as NativeBlend;
 import hxn.gpu.webgl2.Program as NativeProgram;
 import hxn.gpu.webgl2.Sampler as NativeSampler;
 import hxn.gpu.webgl2.Texture as NativeTexture;
@@ -43,10 +45,13 @@ import hxn.gpu.webgl2.Shaders as GlShaders;
 private class Program {
 	public final program:NativeProgram;
 	public final bindings:Bindings;
+	// The pipeline's blend state, which GL sets when the pipeline is bound.
+	public final blend:NativeBlend;
 
-	public function new(program:NativeProgram, bindings:Bindings) {
+	public function new(program:NativeProgram, bindings:Bindings, blend:NativeBlend) {
 		this.program = program;
 		this.bindings = bindings;
+		this.blend = blend;
 	}
 
 	public function close():Void
@@ -175,7 +180,16 @@ class GlDriver implements Driver {
 		if (code.glslVertex == null)
 			throw code.glslMissing != null ? '${code.name} has no GLSL ES: ${code.glslMissing}' : '${code.name} has no GLSL ES: implement hxn.gpu.Shader';
 		var bindings = new Bindings(code.glslBindings);
-		pipeline.native = new Program(GlShaders.program(context, code.glslVertex, code.glslFragment, bindings), bindings);
+		var b = @:privateAccess pipeline.blendCodes();
+		pipeline.native = new Program(GlShaders.program(context, code.glslVertex, code.glslFragment, bindings), bindings, {
+			enabled: b[0] == 1,
+			colorOperation: b[1],
+			colorSource: b[2],
+			colorDestination: b[3],
+			alphaOperation: b[4],
+			alphaSource: b[5],
+			alphaDestination: b[6]
+		});
 	}
 
 	public function createBindGroup(group:BindGroup):Void {
@@ -335,7 +349,9 @@ class GlDriver implements Driver {
 			switch (command) {
 				case SetRenderPipeline(p):
 					pipeline = p;
-					context.useProgram((cast p.native : Program).program);
+					var program:Program = cast p.native;
+					context.setBlend(program.blend);
+					context.useProgram(program.program);
 				case SetBindGroup(i, group):
 					groups.set(i, group);
 				case SetVertexBuffer(slot, buffer):

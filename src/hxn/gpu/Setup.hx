@@ -7,12 +7,12 @@ import haxe.macro.Context;
 class Setup {
 	/** The oldest driver version hxn-gpu supports in each major.minor series. **/
 	static final supported = [
-		"hxn-gpu-metal" => "0.2.0",
-		"hxn-gpu-vulkan" => "0.3.0",
-		"hxn-gpu-d3d12" => "0.2.0",
-		"hxn-gpu-gles" => "0.3.0",
-		"hxn-gpu-webgpu" => "0.3.2",
-		"hxn-gpu-webgl2" => "0.3.1"
+		"hxn-gpu-metal" => "0.2.2",
+		"hxn-gpu-vulkan" => "0.3.2",
+		"hxn-gpu-d3d12" => "0.2.2",
+		"hxn-gpu-gles" => "0.3.2",
+		"hxn-gpu-webgpu" => "0.3.5",
+		"hxn-gpu-webgl2" => "0.3.4"
 	];
 
 	public static function check():Void {

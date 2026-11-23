@@ -42,7 +42,10 @@ GpuDevice.open({required: [Compute]}).then(device -> {
 }, e -> trace(e.message));
 ```
 
-Render: `createRenderPipeline({shader, format, topology, vertexBuffers})`,
+Render: `createRenderPipeline({shader, format, topology, vertexBuffers, blend})`,
+where `blend` is `Blend.alpha`, `Blend.premultiplied`, `Blend.additive` or a
+WebGPU-shaped `{color: {operation, srcFactor, dstFactor}, alpha: {...}}`
+(without one, the color replaces the target's),
 `encoder.beginRenderPass(texture, clear)`, `setPipeline`, `setBindGroup`,
 `setVertexBuffer`, `draw`, `end`, then `device.readTexture(texture)`.
 

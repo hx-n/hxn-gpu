@@ -1,6 +1,6 @@
 {
   "name": "hxn-gpu",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "One GPU API for Haxe over the hxn GPU drivers: Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, with features and limits per device",
   "url": "https://github.com/hx-n/hxn-gpu",
   "license": "Apache",
@@ -9,7 +9,7 @@
     "darmie",
     "rayzor"
   ],
-  "releasenote": "Use hxn 0.3.9 shared logging with application-owned filtering and sinks; retain pinned dependency redistribution notices.",
+  "releasenote": "Blend what a render pipeline draws into its target, with Blend.alpha, premultiplied, additive or a full blend state. Needs the drivers released with blending: hxn-gpu-metal 0.2.2, -vulkan 0.3.2, -d3d12 0.2.2, -gles 0.3.2, -webgpu 0.3.5, -webgl2 0.3.4.",
   "classPath": "src",
   "dependencies": {
     "hxn": "0.3.9",
