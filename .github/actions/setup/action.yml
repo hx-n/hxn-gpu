@@ -3,7 +3,7 @@ description: Haxe, hxcpp, a HashLink VM or Ash, and the released haxelibs hxn-gp
 
 inputs:
   drivers:
-    description: The driver haxelibs to install at their versions, such as "hxn-gpu-metal:0.2.2 hxn-gpu-gles:0.3.2".
+    description: The driver haxelibs to install at their versions, such as "hxn-gpu-metal:0.2.3 hxn-gpu-gles:0.3.3".
     required: true
   hl:
     description: true to install stock HashLink as well as Ash.

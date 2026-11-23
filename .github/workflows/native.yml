@@ -28,15 +28,15 @@ jobs:
       matrix:
         include:
           - os: macos-15
-            drivers: hxn-gpu-metal:0.2.2 hxn-gpu-gles:0.3.2
+            drivers: hxn-gpu-metal:0.2.3 hxn-gpu-gles:0.3.3
             backends: metal gles
             hl: "false"
           - os: ubuntu-latest
-            drivers: hxn-gpu-vulkan:0.3.2 hxn-gpu-gles:0.3.2
+            drivers: hxn-gpu-vulkan:0.3.3 hxn-gpu-gles:0.3.3
             backends: vulkan gles
             hl: "true"
           - os: windows-latest
-            drivers: hxn-gpu-d3d12:0.2.2 hxn-gpu-gles:0.3.2
+            drivers: hxn-gpu-d3d12:0.2.3 hxn-gpu-gles:0.3.3
             backends: d3d12 gles
             hl: "true"
     env:

@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup
         with:
-          drivers: hxn-gpu-webgpu:0.3.5 hxn-gpu-webgl2:0.3.4
+          drivers: hxn-gpu-webgpu:0.3.6 hxn-gpu-webgl2:0.3.5
           web: "true"
       - name: Build and run
         env:
