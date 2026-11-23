@@ -266,10 +266,40 @@ so one buffer holds several batches of instances, each drawn with
 `writeTexture(texture, bytes, region, bytesPerRow)` writes part of a texture,
 such as an update to a glyph atlas, from rows `bytesPerRow` apart.
 
+### Depth and several targets
+
+`beginRenderPassWith` begins a pass with several color attachments and a
+depth attachment, each the same size. Each color attachment clears to its
+`clear` color or keeps what it holds, and the depth attachment clears to its
+`clear` depth, 1 by default, or keeps its depth. A pipeline drawn in the pass
+gives one target for each color attachment, in the same formats, and the
+depth attachment's format:
+
+```haxe
+var pipeline = device.createRenderPipeline({
+	shader: shader,                     // outputs color, then normal
+	targets: [{format: Rgba8Unorm, blend: Blend.alpha}, {format: Rgba16Float}],
+	depth: {format: Depth32Float}       // compare Less and write by default
+});
+var depth = device.createTexture({width: w, height: h, format: Depth32Float, usage: RenderTarget});
+var pass = encoder.beginRenderPassWith({
+	colors: [{target: color, clear: {r: 0, g: 0, b: 0, a: 1}}, {target: normals}],
+	depth: {target: depth}
+});
+```
+
+Each fragment output of the shader goes to the target in the same place.
+`CompareFunction` has WebGPU's functions, from `Never` to `Always`. On GLES
+and WebGL2, every target of a pipeline has the same blend state, because
+OpenGL ES 3.0 blends all draw buffers alike. `limits.maxColorAttachments` is
+8 on WebGPU, Metal, Vulkan and Direct3D 12, and 4 on GLES and WebGL2. Depth
+textures cannot be read back.
+
 ## Limitations
 
 - One queue, and resources tracked whole: a buffer or a texture's only mip level.
-- On GLES and WebGL2, `readTexture` reads back only RGBA8.
+- On GLES and WebGL2, `readTexture` reads back only RGBA8, and every target of
+  a pipeline has the same blend state.
 - Direct3D 12 copies whole buffers, so `writeBuffer` on part of a storage buffer
   reads the rest back first.
 
@@ -278,7 +308,9 @@ such as an update to a glyph atlas, from rows `bytesPerRow` apart.
 The check renders, computes, samples a texture and reads a buffer back on each
 backend the machine has, and prints the same lines everywhere. Its orientation,
 region and layered steps each mark one corner of a target, so a backend that
-flips an image fails them. Each step whose
+flips an image fails them. Its depth step draws a near quad before a far one
+over the same area, so only a working depth test keeps the near one, and its
+targets step writes two targets in one pass. Each step whose
 feature a device lacks prints that it was skipped. The present example draws
 three frames to an hxn-window window on every platform, using its physical
 pixel size and resize events, and reads the last back where the backend can.

@@ -14,12 +14,14 @@ enum abstract Access(Int) to Int {
 	var StorageWrite;
 	var Sampled;
 	var RenderTarget;
+	/** Tested and written as a render pass's depth attachment. **/
+	var DepthTarget;
 	/** Handed to the window system to be shown. **/
 	var Present;
 
 	public function writes():Bool {
 		return switch (cast this : Access) {
-			case CopyDst | StorageWrite | RenderTarget: true;
+			case CopyDst | StorageWrite | RenderTarget | DepthTarget: true;
 			case _: false;
 		}
 	}

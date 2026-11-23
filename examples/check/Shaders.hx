@@ -64,3 +64,38 @@ class Placed implements hxn.gpu.Shader {
 		}
 	};
 }
+
+/** Each vertex has a position in clip space, depth included, and a color that the fragment takes. **/
+class Deep implements hxn.gpu.Shader {
+	static var SRC = {
+		@input var input : { position : Vec3, color : Vec4 };
+		var output : { position : Vec4, color : Vec4 };
+		var shade : Vec4;
+
+		function vertex() {
+			shade = input.color;
+			output.position = vec4(input.position, 1);
+		}
+
+		function fragment() {
+			output.color = shade;
+		}
+	};
+}
+
+/** Writes red into the first color target and green into the second. **/
+class Split implements hxn.gpu.Shader {
+	static var SRC = {
+		@input var input : { position : Vec2 };
+		var output : { position : Vec4, color : Vec4, second : Vec4 };
+
+		function vertex() {
+			output.position = vec4(input.position, 0, 1);
+		}
+
+		function fragment() {
+			output.color = vec4(1, 0, 0, 1);
+			output.second = vec4(0, 1, 0, 1);
+		}
+	};
+}

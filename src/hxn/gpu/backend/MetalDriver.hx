@@ -103,6 +103,8 @@ class MetalDriver implements Driver {
 
 	// The textures of window frames, which a layer's drawable lends and the CPU cannot read.
 	final frames = new Map<Int, Bool>();
+	// The depth state of each pipeline that tests depth, by the pipeline's id.
+	final depthStates = new Map<Int, hxn.gpu.metal.DepthState>();
 
 	public static function open(surface:Null<SurfaceTarget>):Future<Driver> {
 		return Settled.attempt(() -> (new MetalDriver(NativeDevice.systemDefault()) : Driver));
@@ -128,7 +130,8 @@ class MetalDriver implements Driver {
 			height: texture.height,
 			format: format(texture.format),
 			usage: usage,
-			storage: STORAGE
+			// The GPU alone reads and writes a depth texture.
+			storage: texture.format.isDepth() ? hxn.gpu.metal.StorageMode.Private : STORAGE
 		});
 	}
 
@@ -163,17 +166,26 @@ class MetalDriver implements Driver {
 				});
 			layouts.push({buffer: VERTEX_BUFFERS - slot, stride: buffer.stride, perInstance: buffer.perInstance == true});
 		}
-		var b = @:privateAccess pipeline.blendCodes();
-		pipeline.native = device.newRenderPipeline(program.named(pipeline.vertex.name), program.named(pipeline.fragment.name), format(pipeline.format),
-			attributes, layouts, {
-				enabled: b[0] == 1,
-				colorOperation: b[1],
-				colorSource: b[2],
-				colorDestination: b[3],
-				alphaOperation: b[4],
-				alphaSource: b[5],
-				alphaDestination: b[6]
-			});
+		var targets:Array<hxn.gpu.metal.ColorTarget> = [
+			for (i in 0...pipeline.targets.length) {
+				var b = @:privateAccess pipeline.blendCodes(i);
+				({
+					format: format(pipeline.targets[i].format),
+					enabled: b[0] == 1,
+					colorOperation: b[1],
+					colorSource: b[2],
+					colorDestination: b[3],
+					alphaOperation: b[4],
+					alphaSource: b[5],
+					alphaDestination: b[6]
+				} : hxn.gpu.metal.ColorTarget);
+			}
+		];
+		var depth = pipeline.depth;
+		pipeline.native = device.newRenderPipelineWith(program.named(pipeline.vertex.name), program.named(pipeline.fragment.name), targets, depth != null,
+			depth != null ? format(depth.format) : Depth32Float, attributes, layouts);
+		if (depth != null)
+			depthStates.set(pipeline.id, device.newDepthState(@:privateAccess pipeline.depthCompare(), @:privateAccess pipeline.depthWrite()));
 	}
 
 	public function createBindGroup(group:BindGroup):Void {
@@ -218,10 +230,20 @@ class MetalDriver implements Driver {
 			switch (step) {
 				case ComputeStep(list):
 					compute(commands.computeEncoder(), list);
-				case RenderStep(target, null, list):
-					render(commands.renderEncoder(cast target.native, hxn.gpu.metal.LoadAction.Load, 0, 0, 0, 0), target, list);
-				case RenderStep(target, clear, list):
-					render(commands.renderEncoder(cast target.native, hxn.gpu.metal.LoadAction.Clear, clear.r, clear.g, clear.b, clear.a), target, list);
+				case RenderStep(targets, list):
+					var attachments = hxn.gpu.metal.RenderTargets.create();
+					for (c in targets.colors)
+						if (c.clear == null)
+							attachments.color(cast c.target.native, hxn.gpu.metal.LoadAction.Load, 0, 0, 0, 0);
+						else
+							attachments.color(cast c.target.native, hxn.gpu.metal.LoadAction.Clear, c.clear.r, c.clear.g, c.clear.b, c.clear.a);
+					var depth = targets.depth;
+					if (depth != null)
+						attachments.depth(cast depth.target.native, depth.clear == null ? hxn.gpu.metal.LoadAction.Load : hxn.gpu.metal.LoadAction.Clear,
+							depth.clear == null ? 1 : depth.clear);
+					var encoder = commands.renderEncoderWith(attachments);
+					attachments.close();
+					render(encoder, targets.colors[0].target, list);
 				case CopyStep(_, _, _, _, _):
 					throw "Metal has no buffer copies";
 			}
@@ -354,6 +376,9 @@ class MetalDriver implements Driver {
 				case SetRenderPipeline(p):
 					pipeline = p;
 					encoder.setPipeline(cast p.native);
+					var depthState = depthStates.get(p.id);
+					if (depthState != null)
+						encoder.setDepthState(depthState);
 				case SetBindGroup(index, group):
 					groups.set(index, group);
 				case SetVertexBuffer(slot, buffer, offset):
@@ -459,6 +484,7 @@ class MetalDriver implements Driver {
 			case R32Float: R32Float;
 			case Rgba16Float: Rgba16Float;
 			case Rgba32Float: Rgba32Float;
+			case Depth32Float: Depth32Float;
 		}
 	}
 

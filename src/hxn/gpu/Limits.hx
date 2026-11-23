@@ -12,6 +12,7 @@ typedef Limits = {
 	final maxStorageBufferBindingSize:Int;
 	final maxVertexBuffers:Int;
 	final maxVertexAttributes:Int;
+	final maxColorAttachments:Int;
 	final maxComputeWorkgroupSizeX:Int;
 	final maxComputeWorkgroupSizeY:Int;
 	final maxComputeWorkgroupSizeZ:Int;
@@ -27,6 +28,7 @@ class DefaultLimits {
 		maxStorageBufferBindingSize: 134217728,
 		maxVertexBuffers: 8,
 		maxVertexAttributes: 16,
+		maxColorAttachments: 8,
 		maxComputeWorkgroupSizeX: 256,
 		maxComputeWorkgroupSizeY: 256,
 		maxComputeWorkgroupSizeZ: 64,
@@ -41,6 +43,7 @@ class DefaultLimits {
 		maxStorageBufferBindingSize: 0,
 		maxVertexBuffers: 8,
 		maxVertexAttributes: 16,
+		maxColorAttachments: 4,
 		maxComputeWorkgroupSizeX: 0,
 		maxComputeWorkgroupSizeY: 0,
 		maxComputeWorkgroupSizeZ: 0,

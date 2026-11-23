@@ -164,7 +164,7 @@ class D3D12Driver implements Driver {
 	public function createTexture(texture:Texture):Void {
 		var usage = 0;
 		if (texture.usage.has(RenderTarget))
-			usage |= hxn.gpu.d3d12.TextureUsage.RenderTarget;
+			usage |= texture.format.isDepth() ? hxn.gpu.d3d12.TextureUsage.DepthStencil : hxn.gpu.d3d12.TextureUsage.RenderTarget;
 		texture.native = device.createTexture({
 			width: texture.width,
 			height: texture.height,
@@ -206,18 +206,26 @@ class D3D12Driver implements Driver {
 					offset: a.offset,
 					perInstance: pipeline.vertexBuffers[slot].perInstance == true
 				});
-		var b = @:privateAccess pipeline.blendCodes();
-		pipeline.native = device.createGraphicsPipeline(bytecode(pipeline.shader, pipeline.vertex.name, "vertex"),
-			bytecode(pipeline.shader, pipeline.fragment.name, "fragment"), program.signature, format(pipeline.format), topology(pipeline.topology), attributes,
-			{
-				enabled: b[0] == 1,
-				colorOperation: b[1],
-				colorSource: b[2],
-				colorDestination: b[3],
-				alphaOperation: b[4],
-				alphaSource: b[5],
-				alphaDestination: b[6]
-			});
+		var targets:Array<hxn.gpu.d3d12.ColorTarget> = [
+			for (i in 0...pipeline.targets.length) {
+				var b = @:privateAccess pipeline.blendCodes(i);
+				({
+					format: format(pipeline.targets[i].format),
+					enabled: b[0] == 1,
+					colorOperation: b[1],
+					colorSource: b[2],
+					colorDestination: b[3],
+					alphaOperation: b[4],
+					alphaSource: b[5],
+					alphaDestination: b[6]
+				} : hxn.gpu.d3d12.ColorTarget);
+			}
+		];
+		var depth = pipeline.depth;
+		pipeline.native = device.createGraphicsPipelineWith(bytecode(pipeline.shader, pipeline.vertex.name, "vertex"),
+			bytecode(pipeline.shader, pipeline.fragment.name, "fragment"), program.signature, targets, depth != null,
+			depth != null ? format(depth.format) : D32Float, @:privateAccess pipeline.depthCompare(), @:privateAccess pipeline.depthWrite(),
+			topology(pipeline.topology), attributes);
 	}
 
 	public function createBindGroup(group:BindGroup):Void {
@@ -319,8 +327,8 @@ class D3D12Driver implements Driver {
 			switch (step) {
 				case ComputeStep(list):
 					compute(commands, list);
-				case RenderStep(target, clear, list):
-					render(commands, target, clear, list);
+				case RenderStep(targets, list):
+					render(commands, targets, list);
 				case CopyStep(_, _, _, _, _):
 					throw "Direct3D 12 has no buffer copies in hxn-gpu";
 			}
@@ -418,8 +426,11 @@ class D3D12Driver implements Driver {
 			}
 	}
 
-	function render(commands:CommandList, target:Texture, clear:Null<hxn.gpu.Descriptors.Color>, list:Array<Command>):Void {
-		transition(commands, target, RenderTarget, Tracker.GRAPHICS);
+	function render(commands:CommandList, targets:hxn.gpu.Command.PassTargets, list:Array<Command>):Void {
+		for (c in targets.colors)
+			transition(commands, c.target, RenderTarget, Tracker.GRAPHICS);
+		if (targets.depth != null)
+			transition(commands, targets.depth.target, DepthTarget, Tracker.GRAPHICS);
 		var groups = new Map<Int, BindGroup>();
 		for (command in list)
 			switch (command) {
@@ -430,10 +441,17 @@ class D3D12Driver implements Driver {
 						Tracker.groupUses(group, (resource, access) -> transition(commands, resource, access, Tracker.GRAPHICS));
 				case _:
 			}
-		if (clear == null)
-			commands.setRenderTarget(cast target.native, true, 0, 0, 0, 0);
-		else
-			commands.setRenderTarget(cast target.native, false, clear.r, clear.g, clear.b, clear.a);
+		var attachments = hxn.gpu.d3d12.RenderTargets.create();
+		for (c in targets.colors)
+			if (c.clear == null)
+				attachments.color(cast c.target.native, true, 0, 0, 0, 0);
+			else
+				attachments.color(cast c.target.native, false, c.clear.r, c.clear.g, c.clear.b, c.clear.a);
+		var depth = targets.depth;
+		if (depth != null)
+			attachments.depth(cast depth.target.native, depth.clear == null, depth.clear == null ? 1 : depth.clear);
+		commands.setRenderTargets(attachments);
+		attachments.close();
 		var pipeline:Null<RenderPipeline> = null;
 		groups.clear();
 		for (command in list)
@@ -522,6 +540,7 @@ class D3D12Driver implements Driver {
 			case Index: State.IndexBuffer;
 			case StorageWrite: State.UnorderedAccess;
 			case RenderTarget: State.RenderTarget;
+			case DepthTarget: State.DepthWrite;
 			case Present: State.Common;
 			case StorageRead | Sampled:
 				use.stages & Tracker.GRAPHICS != 0 ? State.NonPixelShaderResource | State.PixelShaderResource : State.NonPixelShaderResource;
@@ -557,6 +576,7 @@ class D3D12Driver implements Driver {
 			case R32Float: R32Float;
 			case Rgba16Float: Rgba16Float;
 			case Rgba32Float: Rgba32Float;
+			case Depth32Float: D32Float;
 		}
 	}
 

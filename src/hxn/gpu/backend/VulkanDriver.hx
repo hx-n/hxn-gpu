@@ -123,7 +123,7 @@ class VulkanDriver implements Driver {
 		if (texture.usage.has(Storage))
 			usage |= ImageUsage.Storage;
 		if (texture.usage.has(RenderTarget))
-			usage |= ImageUsage.ColorAttachment;
+			usage |= texture.format.isDepth() ? ImageUsage.DepthAttachment : ImageUsage.ColorAttachment;
 		texture.native = device.createImage({
 			width: texture.width,
 			height: texture.height,
@@ -165,17 +165,25 @@ class VulkanDriver implements Driver {
 					offset: a.offset
 				});
 		}
-		var b = @:privateAccess pipeline.blendCodes();
-		pipeline.native = device.createGraphicsPipeline(program.module, pipeline.vertex.name, program.module, pipeline.fragment.name, program.layout,
-			format(pipeline.format), topology(pipeline.topology), bindings, attributes, {
-				enabled: b[0] == 1,
-				colorOperation: b[1],
-				colorSource: b[2],
-				colorDestination: b[3],
-				alphaOperation: b[4],
-				alphaSource: b[5],
-				alphaDestination: b[6]
-			});
+		var targets:Array<hxn.gpu.vulkan.ColorTarget> = [
+			for (i in 0...pipeline.targets.length) {
+				var b = @:privateAccess pipeline.blendCodes(i);
+				({
+					format: format(pipeline.targets[i].format),
+					enabled: b[0] == 1,
+					colorOperation: b[1],
+					colorSource: b[2],
+					colorDestination: b[3],
+					alphaOperation: b[4],
+					alphaSource: b[5],
+					alphaDestination: b[6]
+				} : hxn.gpu.vulkan.ColorTarget);
+			}
+		];
+		var depth = pipeline.depth;
+		pipeline.native = device.createGraphicsPipelineWith(program.module, pipeline.vertex.name, program.module, pipeline.fragment.name, program.layout,
+			targets, depth != null, depth != null ? format(depth.format) : D32Float, @:privateAccess pipeline.depthCompare(),
+			@:privateAccess pipeline.depthWrite(), topology(pipeline.topology), bindings, attributes);
 	}
 
 	public function createBindGroup(group:BindGroup):Void {
@@ -245,8 +253,8 @@ class VulkanDriver implements Driver {
 			switch (step) {
 				case ComputeStep(list):
 					compute(commands, list);
-				case RenderStep(target, clear, list):
-					render(commands, target, clear, list);
+				case RenderStep(targets, list):
+					render(commands, targets, list);
 				case CopyStep(_, _, _, _, _):
 					throw "Vulkan has no buffer copies";
 			}
@@ -345,10 +353,13 @@ class VulkanDriver implements Driver {
 			}
 	}
 
-	function render(commands:CommandBuffer, target:Texture, clear:Null<hxn.gpu.Descriptors.Color>, list:Array<Command>):Void {
+	function render(commands:CommandBuffer, targets:hxn.gpu.Command.PassTargets, list:Array<Command>):Void {
 		// Barriers can't be recorded inside dynamic rendering, so every transition the
 		// pass needs is recorded before it begins.
-		barrier(commands, target, RenderTarget, Tracker.GRAPHICS);
+		for (c in targets.colors)
+			barrier(commands, c.target, RenderTarget, Tracker.GRAPHICS);
+		if (targets.depth != null)
+			barrier(commands, targets.depth.target, DepthTarget, Tracker.GRAPHICS);
 		var groups = new Map<Int, BindGroup>();
 		for (command in list)
 			switch (command) {
@@ -361,10 +372,18 @@ class VulkanDriver implements Driver {
 						Tracker.groupUses(group, (resource, access) -> barrier(commands, resource, access, Tracker.GRAPHICS));
 				case _:
 			}
-		if (clear == null)
-			commands.beginRendering(cast target.native, hxn.gpu.vulkan.LoadOp.Load, 0, 0, 0, 0);
-		else
-			commands.beginRendering(cast target.native, hxn.gpu.vulkan.LoadOp.Clear, clear.r, clear.g, clear.b, clear.a);
+		var attachments = hxn.gpu.vulkan.Attachments.create();
+		for (c in targets.colors)
+			if (c.clear == null)
+				attachments.color(cast c.target.native, hxn.gpu.vulkan.LoadOp.Load, 0, 0, 0, 0);
+			else
+				attachments.color(cast c.target.native, hxn.gpu.vulkan.LoadOp.Clear, c.clear.r, c.clear.g, c.clear.b, c.clear.a);
+		var depth = targets.depth;
+		if (depth != null)
+			attachments.depth(cast depth.target.native, depth.clear == null ? hxn.gpu.vulkan.LoadOp.Load : hxn.gpu.vulkan.LoadOp.Clear,
+				depth.clear == null ? 1 : depth.clear);
+		commands.beginRenderingWith(attachments);
+		attachments.close();
 		var pipeline:Null<RenderPipeline> = null;
 		groups.clear();
 		for (command in list)
@@ -416,6 +435,7 @@ class VulkanDriver implements Driver {
 			case CopySrc | CopyDst: Stage.Transfer;
 			case Vertex | Index: Stage.VertexInput;
 			case RenderTarget: Stage.ColorAttachmentOutput;
+			case DepthTarget: Stage.EarlyFragmentTests | Stage.LateFragmentTests;
 			case Present: Stage.BottomOfPipe;
 			case Uniform | StorageRead | StorageWrite | Sampled:
 				var bits = 0;
@@ -438,6 +458,7 @@ class VulkanDriver implements Driver {
 			case StorageRead | Sampled: VkAccess.ShaderRead;
 			case StorageWrite: VkAccess.ShaderRead | VkAccess.ShaderWrite;
 			case RenderTarget: VkAccess.ColorAttachmentRead | VkAccess.ColorAttachmentWrite;
+			case DepthTarget: VkAccess.DepthAttachmentRead | VkAccess.DepthAttachmentWrite;
 			case Present: 0;
 		}
 	}
@@ -449,6 +470,7 @@ class VulkanDriver implements Driver {
 			case CopyDst: Layout.TransferDst;
 			case Sampled: Layout.ShaderReadOnly;
 			case RenderTarget: Layout.ColorAttachment;
+			case DepthTarget: Layout.DepthAttachment;
 			case Present: Layout.Present;
 			case _: Layout.General;
 		}
@@ -468,6 +490,7 @@ class VulkanDriver implements Driver {
 			case R32Float: R32Float;
 			case Rgba16Float: Rgba16Float;
 			case Rgba32Float: Rgba32Float;
+			case Depth32Float: D32Float;
 		}
 	}
 

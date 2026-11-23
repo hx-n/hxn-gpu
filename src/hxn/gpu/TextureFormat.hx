@@ -10,12 +10,14 @@ enum abstract TextureFormat(Int) {
 	var R32Float;
 	var Rgba16Float;
 	var Rgba32Float;
+	/** Depth as a 32-bit float, for the depth attachment of a render pass. **/
+	var Depth32Float;
 
 	/** Bytes per pixel. **/
 	public function bytesPerPixel():Int {
 		return switch (cast this : TextureFormat) {
 			case R8Unorm: 1;
-			case Rgba8Unorm | Rgba8UnormSrgb | Bgra8Unorm | Bgra8UnormSrgb | R32Float: 4;
+			case Rgba8Unorm | Rgba8UnormSrgb | Bgra8Unorm | Bgra8UnormSrgb | R32Float | Depth32Float: 4;
 			case Rgba16Float: 8;
 			case Rgba32Float: 16;
 		}
@@ -31,6 +33,11 @@ enum abstract TextureFormat(Int) {
 			case R32Float: "r32float";
 			case Rgba16Float: "rgba16float";
 			case Rgba32Float: "rgba32float";
+			case Depth32Float: "depth32float";
 		}
 	}
+
+	/** Returns true for a depth format. **/
+	public function isDepth():Bool
+		return (cast this : TextureFormat) == Depth32Float;
 }

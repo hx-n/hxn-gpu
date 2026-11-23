@@ -45,13 +45,19 @@ import hxn.gpu.webgl2.Shaders as GlShaders;
 private class Program {
 	public final program:NativeProgram;
 	public final bindings:Bindings;
-	// GL sets the pipeline's blend state when the pipeline is bound.
+	// GL sets the pipeline's blend state and depth state when the pipeline is bound.
 	public final blend:NativeBlend;
+	public final depth:Bool;
+	public final compare:Int;
+	public final write:Bool;
 
-	public function new(program:NativeProgram, bindings:Bindings, blend:NativeBlend) {
+	public function new(program:NativeProgram, bindings:Bindings, blend:NativeBlend, depth:Bool, compare:Int, write:Bool) {
 		this.program = program;
 		this.bindings = bindings;
 		this.blend = blend;
+		this.depth = depth;
+		this.compare = compare;
+		this.write = write;
 	}
 
 	public function close():Void
@@ -206,6 +212,10 @@ class GlDriver implements Driver {
 			throw code.glslMissing != null ? '${code.name} has no GLSL ES: ${code.glslMissing}' : '${code.name} has no GLSL ES: implement hxn.gpu.Shader';
 		var bindings = new Bindings(code.glslBindings);
 		var b = @:privateAccess pipeline.blendCodes();
+		// OpenGL ES 3.0 and WebGL2 blend every draw buffer the same way.
+		for (i in 1...pipeline.targets.length)
+			if ((@:privateAccess pipeline.blendCodes(i)).join(",") != b.join(","))
+				throw '$backend blends every color target of a pipeline the same way, and target $i blends differently from target 0';
 		pipeline.native = new Program(GlShaders.program(context, code.glslVertex, code.glslFragment, bindings), bindings, {
 			enabled: b[0] == 1,
 			colorOperation: b[1],
@@ -214,7 +224,7 @@ class GlDriver implements Driver {
 			alphaOperation: b[4],
 			alphaSource: b[5],
 			alphaDestination: b[6]
-		});
+		}, pipeline.depth != null, @:privateAccess pipeline.depthCompare(), @:privateAccess pipeline.depthWrite());
 	}
 
 	public function createBindGroup(group:BindGroup):Void {
@@ -256,8 +266,8 @@ class GlDriver implements Driver {
 	public function submit(steps:Array<Step>):Void {
 		for (step in steps)
 			switch (step) {
-				case RenderStep(target, clear, list):
-					render(target, clear, list);
+				case RenderStep(targets, list):
+					render(targets, list);
 				case ComputeStep(_):
 					throw '$backend has no compute';
 				case CopyStep(_, _, _, _, _):
@@ -325,13 +335,24 @@ class GlDriver implements Driver {
 
 	// Rows are addressed from the target's first row: GLSL from hxnsl flips clip space, so
 	// the top of what is drawn is row 0, and viewport and scissor rectangles need no flip.
-	function render(target:Texture, clear:Null<hxn.gpu.Descriptors.Color>, list:Array<Command>):Void {
+	function render(targets:hxn.gpu.Command.PassTargets, list:Array<Command>):Void {
+		var target = targets.colors[0].target;
 		var framebuffer = context.createFramebuffer(nativeTexture(target));
+		var more = [for (i in 1...targets.colors.length) targets.colors[i].target];
+		if (targets.depth != null)
+			more.push(targets.depth.target);
+		for (t in more)
+			#if hxn_gpu_gles framebuffer.attach(nativeTexture(t)); #else context.attach(framebuffer, nativeTexture(t)); #end
 		context.bindFramebuffer(framebuffer);
 		context.viewport(0, 0, target.width, target.height);
 		context.scissorTest(false);
-		if (clear != null)
-			context.clear(ClearBits.Color, clear.r, clear.g, clear.b, clear.a);
+		for (i in 0...targets.colors.length) {
+			var clear = targets.colors[i].clear;
+			if (clear != null)
+				context.clearColorBuffer(i, clear.r, clear.g, clear.b, clear.a);
+		}
+		if (targets.depth != null && targets.depth.clear != null)
+			context.clearDepthBuffer(targets.depth.clear);
 		var pipeline:Null<RenderPipeline> = null;
 		var groups = new Map<Int, BindGroup>();
 		var vertexBuffers = new Map<Int, {buffer:Buffer, offset:Int}>();
@@ -388,6 +409,7 @@ class GlDriver implements Driver {
 					pipeline = p;
 					var program:Program = cast p.native;
 					context.setBlend(program.blend);
+					context.setDepth(program.depth, program.compare, program.write);
 					context.useProgram(program.program);
 				case SetBindGroup(i, group):
 					groups.set(i, group);
@@ -447,6 +469,7 @@ class GlDriver implements Driver {
 			case R32Float: R32f;
 			case Rgba16Float: Rgba16f;
 			case Rgba32Float: Rgba32f;
+			case Depth32Float: Depth32f;
 			case Bgra8Unorm | Bgra8UnormSrgb: throw 'OpenGL ES has no $format textures';
 		}
 	}

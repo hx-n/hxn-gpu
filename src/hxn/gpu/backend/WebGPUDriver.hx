@@ -88,7 +88,8 @@ class WebGPUDriver implements Driver {
 	}
 
 	public function createTexture(texture:Texture):Void {
-		var usage = NativeTextureUsage.CopySrc | NativeTextureUsage.CopyDst;
+		// Depth textures are drawn into and sampled, never copied.
+		var usage = texture.format.isDepth() ? 0 : NativeTextureUsage.CopySrc | NativeTextureUsage.CopyDst;
 		if (texture.usage.has(Sampled))
 			usage |= NativeTextureUsage.TextureBinding;
 		if (texture.usage.has(Storage))
@@ -127,17 +128,25 @@ class WebGPUDriver implements Driver {
 				for (a in pipeline.vertexBuffers[i].attributes)
 					({location: a.location, format: vertexFormat(a.format), offset: a.offset, buffer: i} : hxn.gpu.webgpu.VertexAttribute)
 		];
-		var b = @:privateAccess pipeline.blendCodes();
-		pipeline.native = device.createRenderPipeline(program.module, pipeline.vertex.name, pipeline.fragment.name, program.layout,
-			format(pipeline.format), topology(pipeline.topology), buffers, attributes, constants(pipeline), {
-				enabled: b[0] == 1,
-				colorOperation: b[1],
-				colorSource: b[2],
-				colorDestination: b[3],
-				alphaOperation: b[4],
-				alphaSource: b[5],
-				alphaDestination: b[6]
-			});
+		var targets:Array<hxn.gpu.webgpu.ColorTarget> = [
+			for (i in 0...pipeline.targets.length) {
+				var b = @:privateAccess pipeline.blendCodes(i);
+				({
+					format: format(pipeline.targets[i].format),
+					enabled: b[0] == 1,
+					colorOperation: b[1],
+					colorSource: b[2],
+					colorDestination: b[3],
+					alphaOperation: b[4],
+					alphaSource: b[5],
+					alphaDestination: b[6]
+				} : hxn.gpu.webgpu.ColorTarget);
+			}
+		];
+		var depth = pipeline.depth;
+		pipeline.native = device.createRenderPipelineWith(program.module, pipeline.vertex.name, pipeline.fragment.name, program.layout, targets,
+			depth != null, depth != null ? format(depth.format) : Depth32Float, @:privateAccess pipeline.depthCompare(), @:privateAccess pipeline.depthWrite(),
+			topology(pipeline.topology), buffers, attributes, constants(pipeline));
 	}
 
 	public function createBindGroup(group:BindGroup):Void {
@@ -211,9 +220,18 @@ class WebGPUDriver implements Driver {
 						}
 					pass.end();
 					passes.push(pass);
-				case RenderStep(target, clear, commands):
-					var pass = clear == null ? encoder.beginRenderPass(cast target.native, true, 0, 0, 0, 0) : encoder.beginRenderPass(cast target.native, false,
-						clear.r, clear.g, clear.b, clear.a);
+				case RenderStep(targets, commands):
+					var attachments = hxn.gpu.webgpu.RenderTargets.create();
+					for (c in targets.colors)
+						if (c.clear == null)
+							attachments.color(cast c.target.native, true, 0, 0, 0, 0);
+						else
+							attachments.color(cast c.target.native, false, c.clear.r, c.clear.g, c.clear.b, c.clear.a);
+					var depth = targets.depth;
+					if (depth != null)
+						attachments.depth(cast depth.target.native, depth.clear == null, depth.clear == null ? 1 : depth.clear);
+					var pass = encoder.beginRenderPassWith(attachments);
+					attachments.close();
 					for (command in commands)
 						switch (command) {
 							case SetRenderPipeline(p):
@@ -299,6 +317,7 @@ class WebGPUDriver implements Driver {
 			case R32Float: R32Float;
 			case Rgba16Float: Rgba16Float;
 			case Rgba32Float: Rgba32Float;
+			case Depth32Float: Depth32Float;
 		}
 	}
 

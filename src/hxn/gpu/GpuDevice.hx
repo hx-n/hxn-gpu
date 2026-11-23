@@ -258,14 +258,27 @@ class GpuDevice {
 			need(InstanceVertexBuffers, "a vertex buffer read per instance");
 		if (buffers.length > limits.maxVertexBuffers)
 			throw 'a pipeline has at most ${limits.maxVertexBuffers} vertex buffers';
-		if (d.blend != null)
-			for (c in [d.blend.color, d.blend.alpha])
-				if ((c.operation == Min || c.operation == Max)
-					&& ((c.srcFactor != null && c.srcFactor != One) || (c.dstFactor != null && c.dstFactor != One)))
-					throw "a blend with the operation Min or Max takes the factor One for its source and its destination";
+		if ((d.format == null) == (d.targets == null))
+			throw "a render pipeline takes `format` for one target or `targets` for several, and one of the two";
+		var targets:Array<ColorTargetState> = d.targets != null ? d.targets : [{format: d.format, blend: d.blend}];
+		if (targets.length == 0)
+			throw "a render pipeline has at least one color target";
+		if (targets.length > limits.maxColorAttachments)
+			throw 'a render pipeline has at most ${limits.maxColorAttachments} color targets';
+		for (t in targets) {
+			if (t.format.isDepth())
+				throw 'a color target has a color format, not ${t.format}';
+			if (t.blend != null)
+				for (c in [t.blend.color, t.blend.alpha])
+					if ((c.operation == Min || c.operation == Max)
+						&& ((c.srcFactor != null && c.srcFactor != One) || (c.dstFactor != null && c.dstFactor != One)))
+						throw "a blend with the operation Min or Max takes the factor One for its source and its destination";
+		}
+		if (d.depth != null && !d.depth.format.isDepth())
+			throw 'a depth state has a depth format, not ${d.depth.format}';
 		var shader = d.shader;
 		var pipeline = new RenderPipeline(this, shader, shader.entryPoint(d.vertexEntryPoint, "vertex"), shader.entryPoint(d.fragmentEntryPoint, "fragment"),
-			d.format, d.topology != null ? d.topology : TriangleList, buffers, constantsOf(d.constants), d.blend);
+			targets, d.depth, d.topology != null ? d.topology : TriangleList, buffers, constantsOf(d.constants));
 		driver.createRenderPipeline(pipeline);
 		return pipeline;
 	}
@@ -365,6 +378,8 @@ class GpuDevice {
 	**/
 	public function readTexture(texture:Texture):Future<Bytes> {
 		live();
+		if (texture.format.isDepth())
+			throw "a depth texture cannot be read back";
 		return driver.readTexture(texture);
 	}
 

@@ -75,12 +75,38 @@ typedef BlendState = {
 	final alpha:BlendComponent;
 }
 
+/** Each color target of a render pipeline has a format and a blend state. **/
+typedef ColorTargetState = {
+	final format:TextureFormat;
+	/** The blend state. Without it, the pipeline writes this target's color as it is. **/
+	final ?blend:BlendState;
+}
+
+/**
+	`DepthState` sets how a render pipeline tests and writes depth. The test
+	passes when `compare` holds between the fragment's depth and the depth in
+	the target, `Less` by default, and with `write`, true by default, a
+	fragment that passes writes its depth.
+**/
+typedef DepthState = {
+	final format:TextureFormat;
+	final ?compare:CompareFunction;
+	final ?write:Bool;
+}
+
 typedef RenderPipelineDescriptor = {
 	final shader:ShaderModule;
 	final ?vertexEntryPoint:String;
 	final ?fragmentEntryPoint:String;
-	/** The format of the textures it renders into. **/
-	final format:TextureFormat;
+	/** The format of the one texture it renders into. Give `format` or `targets`. **/
+	final ?format:TextureFormat;
+	/**
+		The color targets, one for each output of the fragment shader, in
+		order. Give `format` or `targets`.
+	**/
+	final ?targets:Array<ColorTargetState>;
+	/** The depth test and the depth target's format. Without it, the pipeline tests no depth. **/
+	final ?depth:DepthState;
 	/** TriangleList by default. **/
 	final ?topology:Topology;
 	/** Vertex buffer layouts by slot. More than one needs `MultipleVertexBuffers`. **/
@@ -117,4 +143,32 @@ typedef Color = {
 	final g:Float;
 	final b:Float;
 	final a:Float;
+}
+
+/**
+	Each color attachment of a render pass has the texture it renders into.
+	The pass first clears the texture to `clear`, transparent black by
+	default, or with `keep` draws over what it holds.
+**/
+typedef ColorAttachment = {
+	final target:Texture;
+	final ?clear:Color;
+	final ?keep:Bool;
+}
+
+/**
+	The depth attachment of a render pass is a texture of a depth format. The
+	pass first clears it to `clear`, 1 by default, or with `keep` tests
+	against what it holds.
+**/
+typedef DepthAttachment = {
+	final target:Texture;
+	final ?clear:Float;
+	final ?keep:Bool;
+}
+
+/** `RenderPassDescriptor` lists the attachments of a render pass. Every attachment has the same size. **/
+typedef RenderPassDescriptor = {
+	final colors:Array<ColorAttachment>;
+	final ?depth:DepthAttachment;
 }

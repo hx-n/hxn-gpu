@@ -53,7 +53,13 @@ clearing it. In a pass, `setViewport(x, y, w, h)` and `setScissorRect(x, y, w, h
 take pixels from the top-left corner, and `setVertexBuffer(slot, buffer, offset)`
 starts `offset` bytes in. Layouts with `perInstance: true` step once per
 instance. `device.writeTexture(texture, bytes, {x, y, width, height}, bytesPerRow)`
-writes part of a texture.
+writes part of a texture. Several targets and depth: pipelines take
+`targets: [{format, blend}, ...]` instead of `format`, and
+`depth: {format: Depth32Float, compare, write}` (compare `Less`, write true by
+default); `encoder.beginRenderPassWith({colors: [{target, clear, keep}, ...],
+depth: {target, clear, keep}})` matches them. On GLES and WebGL2 every target
+of a pipeline has the same blend. `limits.maxColorAttachments` is 8, or 4 on
+GLES and WebGL2.
 
 ## Rules
 

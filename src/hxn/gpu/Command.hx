@@ -18,14 +18,24 @@ enum Command {
 	DrawIndexed(indices:Int, instances:Int, firstIndex:Int);
 }
 
+/**
+	The attachments of a render pass, as the drivers take them. Each color
+	target is cleared to `clear` first, or drawn over when `clear` is null.
+	The depth target, when there is one, is cleared to `clear` first, or
+	tested against when `clear` is null.
+**/
+typedef PassTargets = {
+	final colors:Array<{target:Texture, clear:Null<Color>}>;
+	final depth:Null<{target:Texture, clear:Null<Float>}>;
+}
+
 /** One step of a submission. Steps run in order. **/
 enum Step {
 	ComputeStep(commands:Array<Command>);
 	/**
-		Records one render pass. The pass first clears `target` to `clear`, or
-		draws over what `target` holds when `clear` is null. Each pass starts
-		with a viewport and a scissor that cover the whole target.
+		Records one render pass into `targets`. Each pass starts with a
+		viewport and a scissor that cover the whole of its targets.
 	**/
-	RenderStep(target:Texture, clear:Null<Color>, commands:Array<Command>);
+	RenderStep(targets:PassTargets, commands:Array<Command>);
 	CopyStep(source:Buffer, sourceOffset:Int, destination:Buffer, destinationOffset:Int, size:Int);
 }

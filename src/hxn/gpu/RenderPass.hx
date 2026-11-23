@@ -4,21 +4,32 @@ import hxn.gpu.Command;
 
 class RenderPass {
 	final encoder:CommandEncoder;
-	final target:Texture;
+	final targets:PassTargets;
+	// The size that every attachment has.
+	final width:Int;
+	final height:Int;
 	@:allow(hxn.gpu) final commands:Array<Command> = [];
 	var pipeline:Null<RenderPipeline>;
 	var indexed = false;
 	var ended = false;
 
-	@:allow(hxn.gpu) function new(encoder:CommandEncoder, target:Texture) {
+	@:allow(hxn.gpu) function new(encoder:CommandEncoder, targets:PassTargets) {
 		this.encoder = encoder;
-		this.target = target;
+		this.targets = targets;
+		width = targets.colors[0].target.width;
+		height = targets.colors[0].target.height;
 	}
 
 	public function setPipeline(pipeline:RenderPipeline):Void {
 		recording();
-		if (pipeline.format != target.format)
-			throw 'the pipeline renders ${pipeline.format}, the target is ${target.format}';
+		var formats = [for (c in targets.colors) c.target.format];
+		var wanted = [for (t in pipeline.targets) t.format];
+		if (formats.join(",") != wanted.join(","))
+			throw 'the pipeline renders ${wanted.join(", ")}, and the pass\'s targets are ${formats.join(", ")}';
+		var depth = targets.depth != null ? targets.depth.target.format : null;
+		var pipelineDepth = pipeline.depth != null ? pipeline.depth.format : null;
+		if (depth != pipelineDepth)
+			throw 'the pipeline tests depth in ${pipelineDepth != null ? '$pipelineDepth' : "no target"}, and the pass has ${depth != null ? 'a $depth' : "no"} depth target';
 		this.pipeline = pipeline;
 		commands.push(SetRenderPipeline(pipeline));
 	}
@@ -49,8 +60,8 @@ class RenderPass {
 	**/
 	public function setViewport(x:Float, y:Float, width:Float, height:Float):Void {
 		recording();
-		if (x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > target.width || y + height > target.height)
-			throw 'a viewport lies inside the ${target.width}x${target.height} target, not at $x, $y, ${width}x$height';
+		if (x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > this.width || y + height > this.height)
+			throw 'a viewport lies inside the ${this.width}x${this.height} target, not at $x, $y, ${width}x$height';
 		commands.push(SetViewport(x, y, width, height));
 	}
 
@@ -60,8 +71,8 @@ class RenderPass {
 	**/
 	public function setScissorRect(x:Int, y:Int, width:Int, height:Int):Void {
 		recording();
-		if (x < 0 || y < 0 || width < 0 || height < 0 || x + width > target.width || y + height > target.height)
-			throw 'a scissor rectangle lies inside the ${target.width}x${target.height} target, not at $x, $y, ${width}x$height';
+		if (x < 0 || y < 0 || width < 0 || height < 0 || x + width > this.width || y + height > this.height)
+			throw 'a scissor rectangle lies inside the ${this.width}x${this.height} target, not at $x, $y, ${width}x$height';
 		commands.push(SetScissor(x, y, width, height));
 	}
 

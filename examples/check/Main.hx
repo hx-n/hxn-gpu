@@ -29,7 +29,7 @@ class Main {
 		GpuDevice.open().then(device -> {
 			Sys.println('device: ${device.backend}');
 			Sys.println('features: ${device.features}');
-			compute(device, () -> render(device, () -> blended(device, () -> textured(device, () -> orientation(device, () -> regions(device, () -> layered(device, () -> roundTrip(device, () -> device.close()))))))));
+			compute(device, () -> render(device, () -> blended(device, () -> textured(device, () -> orientation(device, () -> regions(device, () -> layered(device, () -> depthTest(device, () -> split(device, () -> roundTrip(device, () -> device.close()))))))))));
 		}, e -> {
 			Sys.println('no GPU: ${e.message}');
 			hxn.Loop.exit(1);
@@ -365,6 +365,73 @@ class Main {
 				closeAll([instances, corners, target, pipeline, shader]);
 				next();
 			});
+	}
+
+	// A red quad near the viewer is drawn first, then a blue quad farther away over the same
+	// area. The depth test, `Less` by default, keeps the red quad.
+	static function depthTest(device:GpuDevice, next:() -> Void) {
+		var shader = device.createShader(Deep);
+		var pipeline = device.createRenderPipeline({
+			shader: shader,
+			format: Rgba8Unorm,
+			topology: TriangleStrip,
+			depth: {format: Depth32Float},
+			vertexBuffers: [
+				{
+					stride: 28,
+					attributes: [
+						{location: Deep.INPUT_position, format: Float32x3, offset: 0},
+						{location: Deep.INPUT_color, format: Float32x4, offset: 12}
+					]
+				}
+			]
+		});
+		var quads = [];
+		for (quad in [[0.25, 1.0, 0.0, 0.0], [0.75, 0.0, 0.0, 1.0]])
+			for (corner in [[-1, -1], [1, -1], [-1, 1], [1, 1]])
+				quads = quads.concat([corner[0], corner[1], quad[0], quad[1], quad[2], quad[3], 1]);
+		var vertices = floats(device, quads);
+		var target = device.createTexture({width: 4, height: 4, format: Rgba8Unorm, usage: RenderTarget});
+		var depth = device.createTexture({width: 4, height: 4, format: Depth32Float, usage: RenderTarget});
+
+		var encoder = device.createCommandEncoder();
+		var pass = encoder.beginRenderPassWith({colors: [{target: target, clear: {r: 0, g: 0, b: 0, a: 1}}], depth: {target: depth}});
+		pass.setPipeline(pipeline);
+		pass.setVertexBuffer(0, vertices);
+		pass.draw(4);
+		pass.draw(4, 1, 4);
+		pass.end();
+		device.submit(encoder);
+		readTarget(device, target, [255, 0, 0, 255], "depth", () -> {
+			closeAll([vertices, depth, target, pipeline, shader]);
+			next();
+		});
+	}
+
+	// One pass writes red into one target and green into another.
+	static function split(device:GpuDevice, next:() -> Void) {
+		var shader = device.createShader(Split);
+		var pipeline = device.createRenderPipeline({
+			shader: shader,
+			targets: [{format: Rgba8Unorm}, {format: Rgba8Unorm}],
+			topology: TriangleStrip,
+			vertexBuffers: [{stride: 8, attributes: [{location: Split.INPUT_position, format: Float32x2, offset: 0}]}]
+		});
+		var positions = floats(device, [-1, -1, 1, -1, -1, 1, 1, 1]);
+		var first = device.createTexture({width: 4, height: 4, format: Rgba8Unorm, usage: RenderTarget});
+		var second = device.createTexture({width: 4, height: 4, format: Rgba8Unorm, usage: RenderTarget});
+
+		var encoder = device.createCommandEncoder();
+		var pass = encoder.beginRenderPassWith({colors: [{target: first}, {target: second}]});
+		pass.setPipeline(pipeline);
+		pass.setVertexBuffer(0, positions);
+		pass.draw(4);
+		pass.end();
+		device.submit(encoder);
+		readTarget(device, first, [255, 0, 0, 255], "targets, the first", () -> readTarget(device, second, [0, 255, 0, 255], "targets, the second", () -> {
+			closeAll([positions, first, second, pipeline, shader]);
+			next();
+		}));
 	}
 
 	static function roundTrip(device:GpuDevice, next:() -> Void) {
