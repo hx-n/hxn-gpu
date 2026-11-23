@@ -25,13 +25,16 @@ class CommandEncoder {
 
 	/**
 		Begins a render pass into `target`. The pass first clears `target` to `clear`,
-		which defaults to transparent black.
+		which defaults to transparent black. With `keep`, it draws over what `target`
+		holds instead, for a layer drawn in a pass of its own.
 	**/
-	public function beginRenderPass(target:Texture, ?clear:Color):RenderPass {
+	public function beginRenderPass(target:Texture, ?clear:Color, ?keep:Bool = false):RenderPass {
 		if (!target.usage.has(RenderTarget))
 			throw "a render pass target needs TextureUsage.RenderTarget";
+		if (keep && clear != null)
+			throw "a render pass either clears its target or keeps it, not both";
 		var pass = new RenderPass(this, target);
-		start(RenderStep(target, clear != null ? clear : {r: 0, g: 0, b: 0, a: 0}, pass.commands));
+		start(RenderStep(target, keep ? null : clear != null ? clear : {r: 0, g: 0, b: 0, a: 0}, pass.commands));
 		return pass;
 	}
 

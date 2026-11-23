@@ -75,11 +75,11 @@ feature and the backend.
 |---|---|---|---|---|---|---|
 | `Compute` | yes | yes | yes | | yes | |
 | `StorageTextures` | yes | | yes | | yes | |
-| `TextureWrites` | yes | yes | | yes | yes | yes |
+| `TextureWrites` | yes | yes | yes | yes | yes | yes |
 | `IndexedDraws` | | | | yes | | yes |
 | `BindingOffsets` | yes | | yes | | yes | |
-| `MultipleVertexBuffers` | yes | yes | yes | yes | | yes |
-| `InstanceVertexBuffers` | yes | | yes | yes | | yes |
+| `MultipleVertexBuffers` | yes | yes | yes | yes | yes | yes |
+| `InstanceVertexBuffers` | yes | yes | yes | yes | yes | yes |
 | `BufferCopies` | | | | | yes | |
 | `PipelineConstants` | | | | | yes | |
 | `Presentation` | yes | yes | yes | yes | yes | yes |
@@ -232,18 +232,53 @@ In a threaded browser build, `await` works (under Ash, from 0.1.21): the
 browser drivers run in a Worker of their own. Without threads, deliver results
 with `then`: `await` blocks the thread the browser settles them on.
 
+### Coordinates and passes
+
+Every backend puts clip space +y at the top of the target. The top row is the
+first row that `readTexture` returns and `writeTexture` writes, and a shader
+samples it at v = 0. Rectangles are in pixels from the target's top-left
+corner.
+
+Each render pass starts with its viewport and scissor covering the whole target.
+`setViewport(x, y, width, height)` maps clip space onto part of the target, and
+`setScissorRect(x, y, width, height)` limits drawing to a rectangle.
+`beginRenderPass(target, null, true)` begins a pass that keeps what the target
+holds instead of clearing it, so a layer drawn in its own pass goes over the
+layer before it:
+
+```haxe
+var encoder = device.createCommandEncoder();
+var world = encoder.beginRenderPass(frame, {r: 0, g: 0, b: 0, a: 1});
+// ... draw the world ...
+world.end();
+var overlay = encoder.beginRenderPass(frame, null, true);
+overlay.setScissorRect(0, 0, frame.width, 64);
+// ... draw a bar along the top ...
+overlay.end();
+device.submit(encoder);
+```
+
+Each vertex buffer layout with `perInstance: true` advances once per instance.
+`setVertexBuffer(slot, buffer, offset)` starts `offset` bytes into the buffer,
+so one buffer holds several batches of instances, each drawn with
+`draw(vertices, instances)`.
+
+`writeTexture(texture, bytes, region, bytesPerRow)` writes part of a texture,
+such as an update to a glyph atlas, from rows `bytesPerRow` apart.
+
 ## Limitations
 
 - One queue, and resources tracked whole: a buffer or a texture's only mip level.
-- On GLES and WebGL2, `readTexture` reads back only RGBA8, and rows rendered
-  into a texture come back bottom first.
+- On GLES and WebGL2, `readTexture` reads back only RGBA8.
 - Direct3D 12 copies whole buffers, so `writeBuffer` on part of a storage buffer
   reads the rest back first.
 
 ## Building from source
 
 The check renders, computes, samples a texture and reads a buffer back on each
-backend the machine has, and prints the same lines everywhere. A step whose
+backend the machine has, and prints the same lines everywhere. Its orientation,
+region and layered steps each mark one corner of a target, so a backend that
+flips an image fails them. Each step whose
 feature a device lacks prints that it was skipped. The present example draws
 three frames to an hxn-window window on every platform, using its physical
 pixel size and resize events, and reads the last back where the backend can.

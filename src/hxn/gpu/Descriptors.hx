@@ -16,6 +16,14 @@ typedef TextureDescriptor = {
 	final usage:TextureUsage;
 }
 
+/** A rectangle of a texture in pixels, from its top-left corner. **/
+typedef TextureRegion = {
+	final x:Int;
+	final y:Int;
+	final width:Int;
+	final height:Int;
+}
+
 typedef SamplerDescriptor = {
 	/** Nearest by default. **/
 	final ?filter:Filter;

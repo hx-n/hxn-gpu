@@ -62,7 +62,7 @@ private class VulkanSurface {
 	use into a pipeline barrier, including image layout transitions.
 **/
 class VulkanDriver implements Driver {
-	public static final FEATURES:Features = [Compute, StorageTextures, BindingOffsets, MultipleVertexBuffers, InstanceVertexBuffers, Presentation];
+	public static final FEATURES:Features = [Compute, StorageTextures, TextureWrites, BindingOffsets, MultipleVertexBuffers, InstanceVertexBuffers, Presentation];
 
 	public final backend:Backend = Vulkan;
 	public final adapter:String;
@@ -198,8 +198,25 @@ class VulkanDriver implements Driver {
 		(cast buffer.native : NativeBuffer).write(offset, bytes);
 	}
 
-	public function writeTexture(texture:Texture, bytes:Bytes):Void {
-		throw "Vulkan has no texture writes";
+	// Copies through a staging buffer, in its own submission, so the write lands before the
+	// work submitted after it.
+	public function writeTexture(texture:Texture, region:hxn.gpu.Descriptors.TextureRegion, bytes:Bytes, bytesPerRow:Int):Void {
+		var pixel = texture.format.bytesPerPixel();
+		var row = region.width * pixel;
+		var data = bytes;
+		var rowLength = Std.int(bytesPerRow / pixel);
+		if (bytesPerRow % pixel != 0) {
+			data = Bytes.alloc(row * region.height);
+			for (y in 0...region.height)
+				data.blit(y * row, bytes, y * bytesPerRow, row);
+			rowLength = region.width;
+		}
+		var size = rowLength * pixel * (region.height - 1) + row;
+		var staging = device.createBufferWith(data.sub(0, size), NativeBufferUsage.TransferSrc);
+		var commands = device.createCommandBuffer();
+		barrier(commands, texture, CopyDst, 0);
+		commands.copyBufferToImage(staging, cast texture.native, region.x, region.y, region.width, region.height, rowLength);
+		run(commands).then(_ -> staging.close(), _ -> staging.close());
 	}
 
 	public function readBuffer(buffer:Buffer, offset:Int, size:Int):Future<Bytes> {
@@ -328,7 +345,7 @@ class VulkanDriver implements Driver {
 			}
 	}
 
-	function render(commands:CommandBuffer, target:Texture, clear:hxn.gpu.Descriptors.Color, list:Array<Command>):Void {
+	function render(commands:CommandBuffer, target:Texture, clear:Null<hxn.gpu.Descriptors.Color>, list:Array<Command>):Void {
 		// Barriers can't be recorded inside dynamic rendering, so every transition the
 		// pass needs is recorded before it begins.
 		barrier(commands, target, RenderTarget, Tracker.GRAPHICS);
@@ -337,14 +354,17 @@ class VulkanDriver implements Driver {
 			switch (command) {
 				case SetBindGroup(index, group):
 					groups.set(index, group);
-				case SetVertexBuffer(_, buffer):
+				case SetVertexBuffer(_, buffer, _):
 					barrier(commands, buffer, Vertex, Tracker.GRAPHICS);
 				case Draw(_, _, _):
 					for (group in groups)
 						Tracker.groupUses(group, (resource, access) -> barrier(commands, resource, access, Tracker.GRAPHICS));
 				case _:
 			}
-		commands.beginRendering(cast target.native, hxn.gpu.vulkan.LoadOp.Clear, clear.r, clear.g, clear.b, clear.a);
+		if (clear == null)
+			commands.beginRendering(cast target.native, hxn.gpu.vulkan.LoadOp.Load, 0, 0, 0, 0);
+		else
+			commands.beginRendering(cast target.native, hxn.gpu.vulkan.LoadOp.Clear, clear.r, clear.g, clear.b, clear.a);
 		var pipeline:Null<RenderPipeline> = null;
 		groups.clear();
 		for (command in list)
@@ -354,8 +374,12 @@ class VulkanDriver implements Driver {
 					commands.bindPipeline(BindPoint.Graphics, cast p.native);
 				case SetBindGroup(index, group):
 					groups.set(index, group);
-				case SetVertexBuffer(slot, buffer):
-					commands.bindVertexBuffer(slot, cast buffer.native, 0);
+				case SetVertexBuffer(slot, buffer, offset):
+					commands.bindVertexBuffer(slot, cast buffer.native, offset);
+				case SetViewport(x, y, width, height):
+					commands.setViewport(x, y, width, height);
+				case SetScissor(x, y, width, height):
+					commands.setScissor(x, y, width, height);
 				case Draw(vertices, instances, first):
 					for (index => group in groups)
 						commands.bindDescriptorSet(BindPoint.Graphics, programOf(pipeline.shader).layout, index, cast group.native);

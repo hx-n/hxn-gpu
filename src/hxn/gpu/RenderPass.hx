@@ -30,11 +30,39 @@ class RenderPass {
 		commands.push(SetBindGroup(index, group));
 	}
 
-	public function setVertexBuffer(slot:Int, buffer:Buffer):Void {
+	/**
+		Reads vertex buffer `slot` from `buffer`, starting `offset` bytes in. One buffer
+		can then hold several batches of instances.
+	**/
+	public function setVertexBuffer(slot:Int, buffer:Buffer, ?offset:Int = 0):Void {
 		recording();
 		if (!buffer.usage.has(Vertex))
 			throw "a vertex buffer needs BufferUsage.Vertex";
-		commands.push(SetVertexBuffer(slot, buffer));
+		if (offset < 0 || offset % 4 != 0 || offset >= buffer.size)
+			throw 'a vertex buffer offset is a multiple of 4 inside the buffer, not $offset in ${buffer.size} bytes';
+		commands.push(SetVertexBuffer(slot, buffer, offset));
+	}
+
+	/**
+		Maps clip space onto the rectangle `x`, `y`, `width`, `height` of the target, in
+		pixels from its top-left corner. Each pass starts with the whole target.
+	**/
+	public function setViewport(x:Float, y:Float, width:Float, height:Float):Void {
+		recording();
+		if (x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > target.width || y + height > target.height)
+			throw 'a viewport lies inside the ${target.width}x${target.height} target, not at $x, $y, ${width}x$height';
+		commands.push(SetViewport(x, y, width, height));
+	}
+
+	/**
+		Draws only inside the rectangle `x`, `y`, `width`, `height` of the target, in
+		pixels from its top-left corner. Each pass starts with the whole target.
+	**/
+	public function setScissorRect(x:Int, y:Int, width:Int, height:Int):Void {
+		recording();
+		if (x < 0 || y < 0 || width < 0 || height < 0 || x + width > target.width || y + height > target.height)
+			throw 'a scissor rectangle lies inside the ${target.width}x${target.height} target, not at $x, $y, ${width}x$height';
+		commands.push(SetScissor(x, y, width, height));
 	}
 
 	public function setIndexBuffer(buffer:Buffer, format:IndexFormat):Void {

@@ -325,16 +325,24 @@ class GpuDevice {
 	}
 
 	/**
-		Writes all of `texture` from `bytes`, rows top first, each `width *
-		format.bytesPerPixel()` bytes long. Needs `TextureWrites`.
+		Writes `region` of `texture`, by default all of it, from `bytes`, rows top first and
+		`bytesPerRow` apart. Rows are `width * format.bytesPerPixel()` bytes long, and by
+		default packed. Needs `TextureWrites`.
 	**/
-	public function writeTexture(texture:Texture, bytes:Bytes):Void {
+	public function writeTexture(texture:Texture, bytes:Bytes, ?region:TextureRegion, ?bytesPerRow:Int):Void {
 		live();
 		need(TextureWrites, "writeTexture");
-		var length = texture.width * texture.height * texture.format.bytesPerPixel();
-		if (bytes.length != length)
-			throw 'a ${texture.width}x${texture.height} ${texture.format} texture takes $length bytes, not ${bytes.length}';
-		driver.writeTexture(texture, bytes);
+		var r:TextureRegion = region != null ? region : {x: 0, y: 0, width: texture.width, height: texture.height};
+		if (r.x < 0 || r.y < 0 || r.width <= 0 || r.height <= 0 || r.x + r.width > texture.width || r.y + r.height > texture.height)
+			throw 'a region lies inside the ${texture.width}x${texture.height} texture, not at ${r.x}, ${r.y}, ${r.width}x${r.height}';
+		var row = r.width * texture.format.bytesPerPixel();
+		var stride = bytesPerRow != null ? bytesPerRow : row;
+		if (stride < row)
+			throw 'rows of ${r.width} ${texture.format} pixels are $row bytes, more than bytesPerRow $stride';
+		var length = stride * (r.height - 1) + row;
+		if (bytes.length < length)
+			throw 'a ${r.width}x${r.height} ${texture.format} region with rows $stride bytes apart takes $length bytes, not ${bytes.length}';
+		driver.writeTexture(texture, r, bytes, stride);
 	}
 
 	/**

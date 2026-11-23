@@ -48,6 +48,12 @@ WebGPU-shaped `{color: {operation, srcFactor, dstFactor}, alpha: {...}}`
 (without one, the color replaces the target's),
 `encoder.beginRenderPass(texture, clear)`, `setPipeline`, `setBindGroup`,
 `setVertexBuffer`, `draw`, `end`, then `device.readTexture(texture)`.
+`beginRenderPass(texture, null, true)` keeps what the texture holds instead of
+clearing it. In a pass, `setViewport(x, y, w, h)` and `setScissorRect(x, y, w, h)`
+take pixels from the top-left corner, and `setVertexBuffer(slot, buffer, offset)`
+starts `offset` bytes in. Layouts with `perInstance: true` step once per
+instance. `device.writeTexture(texture, bytes, {x, y, width, height}, bytesPerRow)`
+writes part of a texture.
 
 ## Rules
 
@@ -59,7 +65,7 @@ WebGPU-shaped `{color: {operation, srcFactor, dstFactor}, alpha: {...}}`
   warning through `hxn.Log` (target `hxn.gpu`), or to `OpenOptions.warn`.
 - Check `device.features` before an optional call. A call that lacks a feature
   throws and names the feature and the backend. GLES and WebGL2 have no
-  compute; Vulkan has no `TextureWrites` yet.
+  compute.
 - Present with a `GpuSurface`: `GpuDevice.open({surface: target})` with
   `SurfaceTargets.ofWindow(window)` (a native or browser hxn-window window) or `Canvas`, then
   `device.createSurface(target)`, `surface.configure(w, h)`, and each frame
@@ -71,13 +77,16 @@ WebGPU-shaped `{color: {operation, srcFactor, dstFactor}, alpha: {...}}`
   reads return an `hxn.Future` once earlier submissions have run.
 - In a browser without threads, deliver futures with `then`, never `await`.
   With threads `await` works (under Ash, from 0.1.21).
-- `readTexture` returns rows top first, `width * bytesPerPixel` long; on GLES
-  and WebGL2 only RGBA8, with rendered rows bottom first.
+- Clip space +y is the top of every target on every backend: the first row
+  `readTexture` returns, `width * bytesPerPixel` long, and the row sampled at
+  v = 0. On GLES and WebGL2 `readTexture` reads only RGBA8.
 
 ## Reference
 
 https://github.com/hx-n/hxn-gpu. `examples/check/Main.hx` computes, renders,
-samples a texture and reads a buffer back on each backend.
+samples a texture and reads a buffer back on each backend, and checks
+orientation, partial texture writes, kept passes, viewports, scissors and
+instance buffers.
 
 ## Redistribution
 

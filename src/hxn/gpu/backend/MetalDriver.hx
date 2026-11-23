@@ -185,9 +185,9 @@ class MetalDriver implements Driver {
 		(cast buffer.native : NativeBuffer).write(offset, bytes);
 	}
 
-	public function writeTexture(texture:Texture, bytes:Bytes):Void {
+	public function writeTexture(texture:Texture, region:hxn.gpu.Descriptors.TextureRegion, bytes:Bytes, bytesPerRow:Int):Void {
 		idle();
-		(cast texture.native : NativeTexture).write(bytes, texture.width * texture.format.bytesPerPixel());
+		(cast texture.native : NativeTexture).writeRegion(region.x, region.y, region.width, region.height, bytes, bytesPerRow);
 	}
 
 	public function readBuffer(buffer:Buffer, offset:Int, size:Int):Future<Bytes> {
@@ -218,6 +218,8 @@ class MetalDriver implements Driver {
 			switch (step) {
 				case ComputeStep(list):
 					compute(commands.computeEncoder(), list);
+				case RenderStep(target, null, list):
+					render(commands.renderEncoder(cast target.native, hxn.gpu.metal.LoadAction.Load, 0, 0, 0, 0), target, list);
 				case RenderStep(target, clear, list):
 					render(commands.renderEncoder(cast target.native, hxn.gpu.metal.LoadAction.Clear, clear.r, clear.g, clear.b, clear.a), target, list);
 				case CopyStep(_, _, _, _, _):
@@ -354,8 +356,12 @@ class MetalDriver implements Driver {
 					encoder.setPipeline(cast p.native);
 				case SetBindGroup(index, group):
 					groups.set(index, group);
-				case SetVertexBuffer(slot, buffer):
-					encoder.setVertexBuffer(cast buffer.native, 0, VERTEX_BUFFERS - slot);
+				case SetVertexBuffer(slot, buffer, offset):
+					encoder.setVertexBuffer(cast buffer.native, offset, VERTEX_BUFFERS - slot);
+				case SetViewport(x, y, width, height):
+					encoder.setViewport(x, y, width, height);
+				case SetScissor(x, y, width, height):
+					encoder.setScissor(x, y, width, height);
 				case Draw(vertices, instances, first):
 					var vertex = slotsOf(pipeline, pipeline.vertex.name);
 					bind(vertex, 1, groups, (r, e) -> switch (r.kind) {

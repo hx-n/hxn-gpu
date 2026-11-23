@@ -40,7 +40,9 @@ private class Program {
 
 /** The WebGPU backend, over hxn-gpu-webgpu. **/
 class WebGPUDriver implements Driver {
-	public static final FEATURES:Features = [Compute, StorageTextures, TextureWrites, BindingOffsets, BufferCopies, PipelineConstants, Presentation];
+	public static final FEATURES:Features = [
+		Compute, StorageTextures, TextureWrites, BindingOffsets, MultipleVertexBuffers, InstanceVertexBuffers, BufferCopies, PipelineConstants, Presentation
+	];
 
 	public final backend:Backend = WebGPU;
 	public final adapter:String;
@@ -116,14 +118,18 @@ class WebGPUDriver implements Driver {
 
 	public function createRenderPipeline(pipeline:RenderPipeline):Void {
 		var program = programOf(pipeline.shader);
-		var buffer = pipeline.vertexBuffers.length > 0 ? pipeline.vertexBuffers[0] : null;
-		var attributes = buffer == null ? [] : [
-			for (a in buffer.attributes)
-				({location: a.location, format: vertexFormat(a.format), offset: a.offset} : hxn.gpu.webgpu.VertexAttribute)
+		var buffers = [
+			for (b in pipeline.vertexBuffers)
+				({stride: b.stride, perInstance: b.perInstance == true} : hxn.gpu.webgpu.VertexBuffer)
+		];
+		var attributes = [
+			for (i in 0...pipeline.vertexBuffers.length)
+				for (a in pipeline.vertexBuffers[i].attributes)
+					({location: a.location, format: vertexFormat(a.format), offset: a.offset, buffer: i} : hxn.gpu.webgpu.VertexAttribute)
 		];
 		var b = @:privateAccess pipeline.blendCodes();
 		pipeline.native = device.createRenderPipeline(program.module, pipeline.vertex.name, pipeline.fragment.name, program.layout,
-			format(pipeline.format), topology(pipeline.topology), buffer == null ? 0 : buffer.stride, attributes, constants(pipeline), {
+			format(pipeline.format), topology(pipeline.topology), buffers, attributes, constants(pipeline), {
 				enabled: b[0] == 1,
 				colorOperation: b[1],
 				colorSource: b[2],
@@ -152,8 +158,8 @@ class WebGPUDriver implements Driver {
 		device.writeBuffer(cast buffer.native, offset, bytes);
 	}
 
-	public function writeTexture(texture:Texture, bytes:Bytes):Void {
-		device.writeTexture(cast texture.native, bytes, texture.width * texture.format.bytesPerPixel());
+	public function writeTexture(texture:Texture, region:hxn.gpu.Descriptors.TextureRegion, bytes:Bytes, bytesPerRow:Int):Void {
+		device.writeTextureRegion(cast texture.native, region.x, region.y, region.width, region.height, bytes, bytesPerRow);
 	}
 
 	public function readBuffer(buffer:Buffer, offset:Int, size:Int):Future<Bytes> {
@@ -206,15 +212,20 @@ class WebGPUDriver implements Driver {
 					pass.end();
 					passes.push(pass);
 				case RenderStep(target, clear, commands):
-					var pass = encoder.beginRenderPass(cast target.native, clear.r, clear.g, clear.b, clear.a);
+					var pass = clear == null ? encoder.beginRenderPass(cast target.native, true, 0, 0, 0, 0) : encoder.beginRenderPass(cast target.native, false,
+						clear.r, clear.g, clear.b, clear.a);
 					for (command in commands)
 						switch (command) {
 							case SetRenderPipeline(p):
 								pass.setPipeline(cast p.native);
 							case SetBindGroup(index, group):
 								pass.setBindGroup(index, cast group.native);
-							case SetVertexBuffer(slot, buffer):
-								pass.setVertexBuffer(slot, cast buffer.native);
+							case SetVertexBuffer(slot, buffer, offset):
+								pass.setVertexBuffer(slot, cast buffer.native, offset);
+							case SetViewport(x, y, width, height):
+								pass.setViewport(x, y, width, height);
+							case SetScissor(x, y, width, height):
+								pass.setScissorRect(x, y, width, height);
 							case Draw(vertices, instances, first):
 								pass.draw(vertices, instances, first, 0);
 							case _:

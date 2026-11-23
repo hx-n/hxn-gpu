@@ -96,7 +96,7 @@ private class Group {
 	storage buffers live in the default heap and are written through staging buffers.
 **/
 class D3D12Driver implements Driver {
-	public static final FEATURES:Features = [Compute, TextureWrites, MultipleVertexBuffers, Presentation];
+	public static final FEATURES:Features = [Compute, TextureWrites, MultipleVertexBuffers, InstanceVertexBuffers, Presentation];
 
 	/** The buffers of a window's swap chain. **/
 	static inline final SWAP_BUFFERS = 2;
@@ -203,7 +203,8 @@ class D3D12Driver implements Driver {
 					location: a.location,
 					slot: slot,
 					format: vertexFormat(a.format),
-					offset: a.offset
+					offset: a.offset,
+					perInstance: pipeline.vertexBuffers[slot].perInstance == true
 				});
 		var b = @:privateAccess pipeline.blendCodes();
 		pipeline.native = device.createGraphicsPipeline(bytecode(pipeline.shader, pipeline.vertex.name, "vertex"),
@@ -262,17 +263,18 @@ class D3D12Driver implements Driver {
 		run(commands).then(_ -> staging.close(), _ -> staging.close());
 	}
 
-	public function writeTexture(texture:Texture, bytes:Bytes):Void {
+	// Direct3D 12 copies rows 256 bytes apart, so the rows are staged at that pitch.
+	public function writeTexture(texture:Texture, region:hxn.gpu.Descriptors.TextureRegion, bytes:Bytes, bytesPerRow:Int):Void {
 		var native:NativeTexture = cast texture.native;
-		var row = texture.width * texture.format.bytesPerPixel();
-		var pitch = native.copyPitch();
-		var padded = Bytes.alloc(pitch * texture.height);
-		for (y in 0...texture.height)
-			padded.blit(y * pitch, bytes, y * row, row);
+		var row = region.width * texture.format.bytesPerPixel();
+		var pitch = Std.int((row + 255) / 256) * 256;
+		var padded = Bytes.alloc(pitch * region.height);
+		for (y in 0...region.height)
+			padded.blit(y * pitch, bytes, y * bytesPerRow, row);
 		var staging = device.createBufferWith(padded);
 		var commands = device.createCommandList();
 		transition(commands, texture, CopyDst, 0);
-		commands.copyBufferToTexture(native, staging);
+		commands.copyBufferToTextureRegion(native, staging, region.x, region.y, region.width, region.height);
 		run(commands).then(_ -> staging.close(), _ -> staging.close());
 	}
 
@@ -415,7 +417,7 @@ class D3D12Driver implements Driver {
 			}
 	}
 
-	function render(commands:CommandList, target:Texture, clear:hxn.gpu.Descriptors.Color, list:Array<Command>):Void {
+	function render(commands:CommandList, target:Texture, clear:Null<hxn.gpu.Descriptors.Color>, list:Array<Command>):Void {
 		transition(commands, target, RenderTarget, Tracker.GRAPHICS);
 		var groups = new Map<Int, BindGroup>();
 		for (command in list)
@@ -427,7 +429,10 @@ class D3D12Driver implements Driver {
 						Tracker.groupUses(group, (resource, access) -> transition(commands, resource, access, Tracker.GRAPHICS));
 				case _:
 			}
-		commands.setRenderTarget(cast target.native, clear.r, clear.g, clear.b, clear.a);
+		if (clear == null)
+			commands.setRenderTarget(cast target.native, true, 0, 0, 0, 0);
+		else
+			commands.setRenderTarget(cast target.native, false, clear.r, clear.g, clear.b, clear.a);
 		var pipeline:Null<RenderPipeline> = null;
 		groups.clear();
 		for (command in list)
@@ -439,8 +444,12 @@ class D3D12Driver implements Driver {
 					commands.setTopology(topology(p.topology));
 				case SetBindGroup(index, group):
 					groups.set(index, group);
-				case SetVertexBuffer(slot, buffer):
-					commands.setVertexBuffer(slot, memoryOf(buffer).buffer, pipeline.vertexBuffers[slot].stride);
+				case SetVertexBuffer(slot, buffer, offset):
+					commands.setVertexBuffer(slot, memoryOf(buffer).buffer, pipeline.vertexBuffers[slot].stride, offset);
+				case SetViewport(x, y, width, height):
+					commands.setViewport(x, y, width, height);
+				case SetScissor(x, y, width, height):
+					commands.setScissor(x, y, width, height);
 				case Draw(vertices, instances, first):
 					bindGroups(programOf(pipeline.shader), groups, (index, kind, buffer) -> commands.setGraphicsRootBuffer(index, kind, buffer),
 						(index, heap, offset) -> commands.setGraphicsRootTable(index, heap, offset));

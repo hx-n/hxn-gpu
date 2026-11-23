@@ -46,3 +46,21 @@ class Textured implements hxn.gpu.Shader {
 		}
 	};
 }
+
+/** A quad moved by each instance's `offset`, filled with its `color`. **/
+class Placed implements hxn.gpu.Shader {
+	static var SRC = {
+		@input var input : { position : Vec2, offset : Vec2, color : Vec4 };
+		var output : { position : Vec4, color : Vec4 };
+		var tint : Vec4;
+
+		function vertex() {
+			tint = input.color;
+			output.position = vec4(input.position + input.offset, 0, 1);
+		}
+
+		function fragment() {
+			output.color = tint;
+		}
+	};
+}

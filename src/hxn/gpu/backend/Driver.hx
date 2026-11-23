@@ -22,8 +22,11 @@ interface Driver {
 	function createRenderPipeline(pipeline:RenderPipeline):Void;
 	function createBindGroup(group:BindGroup):Void;
 	function writeBuffer(buffer:Buffer, offset:Int, bytes:Bytes):Void;
-	/** `bytes` holds the rows top first, each `width * bytesPerPixel` long. **/
-	function writeTexture(texture:Texture, bytes:Bytes):Void;
+	/**
+		Writes `region` of `texture`. `bytes` holds its rows top first, `bytesPerRow` apart,
+		each `region.width * bytesPerPixel` long.
+	**/
+	function writeTexture(texture:Texture, region:hxn.gpu.Descriptors.TextureRegion, bytes:Bytes, bytesPerRow:Int):Void;
 	function readBuffer(buffer:Buffer, offset:Int, size:Int):Future<Bytes>;
 	/** The rows top first, each `width * bytesPerPixel` long. **/
 	function readTexture(texture:Texture):Future<Bytes>;

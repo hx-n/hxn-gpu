@@ -5,7 +5,8 @@ import Shaders;
 /**
 	The check CI runs on each backend: a compute shader over a buffer, a render pass into
 	a texture, a pass that samples a texture, and a buffer written and read back, with
-	each result checked. A step that needs a feature the device lacks prints that it was
+	each result checked. The orientation, region and layered steps mark one corner of the
+	target, so a flipped image fails them. Each step that needs a feature the device lacks prints that it was
 	skipped; every other line is the same on all backends.
 **/
 class Main {
@@ -28,7 +29,7 @@ class Main {
 		GpuDevice.open().then(device -> {
 			Sys.println('device: ${device.backend}');
 			Sys.println('features: ${device.features}');
-			compute(device, () -> render(device, () -> blended(device, () -> textured(device, () -> roundTrip(device, () -> device.close())))));
+			compute(device, () -> render(device, () -> blended(device, () -> textured(device, () -> orientation(device, () -> regions(device, () -> layered(device, () -> roundTrip(device, () -> device.close()))))))));
 		}, e -> {
 			Sys.println('no GPU: ${e.message}');
 			hxn.Loop.exit(1);
@@ -80,6 +81,26 @@ class Main {
 				for (c in 0...4)
 					check(Math.abs(pixels.get(p * 4 + c) - expected[c]) <= tolerance, '$label: pixel $p channel $c is ${pixels.get(p * 4 + c)}, not ${expected[c]}');
 			Sys.println('$label: ${target.width}x${target.height} pixels of ${[for (c in 0...4) pixels.get(c)].join(", ")}');
+			next();
+		}, failed);
+	}
+
+	/**
+		Reads `target` back and checks that its top-left `corner` by `corner` pixels are
+		`inside` and the rest `outside`, or with `bottomRight` the bottom-right corner.
+	**/
+	static function readCorner(device:GpuDevice, target:Texture, corner:Int, inside:Array<Int>, outside:Array<Int>, label:String, message:String,
+			next:() -> Void, bottomRight = false) {
+		device.readTexture(target).then(pixels -> {
+			for (y in 0...target.height)
+				for (x in 0...target.width) {
+					var within = bottomRight ? x >= target.width - corner && y >= target.height - corner : x < corner && y < corner;
+					var expected = within ? inside : outside;
+					var p = (y * target.width + x) * 4;
+					for (c in 0...4)
+						check(pixels.get(p + c) == expected[c], '$label: pixel $x, $y channel $c is ${pixels.get(p + c)}, not ${expected[c]}');
+				}
+			Sys.println('$label: $message');
 			next();
 		}, failed);
 	}
@@ -199,6 +220,149 @@ class Main {
 			closeAll([group, sampler, image, vertices, target, pipeline, shader]);
 			next();
 		});
+	}
+
+	// Red over clip space x -1 to 0 and y 0 to 1 fills the top-left quarter.
+	static function orientation(device:GpuDevice, next:() -> Void) {
+		var shader = device.createShader(Tinted);
+		var pipeline = device.createRenderPipeline({
+			shader: shader,
+			format: Rgba8Unorm,
+			topology: TriangleStrip,
+			vertexBuffers: [{stride: 8, attributes: [{location: Tinted.INPUT_position, format: Float32x2, offset: 0}]}]
+		});
+		var target = device.createTexture({width: 4, height: 4, format: Rgba8Unorm, usage: RenderTarget});
+		var positions = floats(device, [-1, 0, 0, 0, -1, 1, 0, 1]);
+		var params = Bytes.alloc(Tinted.PARAMS_SIZE);
+		params.setFloat(Tinted.PARAMS_tint, 1);
+		params.setFloat(Tinted.PARAMS_tint + 12, 1);
+		var uniforms = device.createBuffer({size: params.length, usage: Uniform, contents: params});
+		var group = device.createBindGroup({pipeline: pipeline, group: Tinted.PARAMS_GROUP, entries: [{binding: Tinted.PARAMS_BINDING, buffer: uniforms}]});
+
+		var encoder = device.createCommandEncoder();
+		var pass = encoder.beginRenderPass(target, {r: 0, g: 0, b: 0, a: 1});
+		pass.setPipeline(pipeline);
+		pass.setBindGroup(Tinted.PARAMS_GROUP, group);
+		pass.setVertexBuffer(0, positions);
+		pass.draw(4);
+		pass.end();
+		device.submit(encoder);
+		readCorner(device, target, 2, [255, 0, 0, 255], [0, 0, 0, 255], "orientation", "clip space toward -x and +y is the top left", () -> {
+			closeAll([group, uniforms, positions, target, pipeline, shader]);
+			next();
+		});
+	}
+
+	// The image is blue, with a 2x2 red region written at 2, 2 from rows 12 bytes apart.
+	// Sampled with uv 0, 0 at the top left, its bottom-right quarter is red.
+	static function regions(device:GpuDevice, next:() -> Void) {
+		if (!device.features.has(TextureWrites)) {
+			Sys.println('regions: ${device.backend} has no texture writes');
+			next();
+			return;
+		}
+		var image = device.createTexture({width: 4, height: 4, format: Rgba8Unorm, usage: Sampled});
+		var blue = Bytes.alloc(4 * 4 * 4);
+		for (i in 0...16) {
+			blue.set(i * 4 + 2, 255);
+			blue.set(i * 4 + 3, 255);
+		}
+		device.writeTexture(image, blue);
+		// Two rows of two red pixels, the first padded with a green one.
+		var red = Bytes.alloc(12 + 8);
+		for (i in [0, 1, 3, 4]) {
+			red.set(i * 4, 255);
+			red.set(i * 4 + 3, 255);
+		}
+		red.set(2 * 4 + 1, 255);
+		red.set(2 * 4 + 3, 255);
+		device.writeTexture(image, red, {x: 2, y: 2, width: 2, height: 2}, 12);
+
+		var shader = device.createShader(Textured);
+		var pipeline = device.createRenderPipeline({
+			shader: shader,
+			format: Rgba8Unorm,
+			topology: TriangleStrip,
+			vertexBuffers: [
+				{
+					stride: 16,
+					attributes: [
+						{location: Textured.INPUT_position, format: Float32x2, offset: 0},
+						{location: Textured.INPUT_uv, format: Float32x2, offset: 8}
+					]
+				}
+			]
+		});
+		var sampler = device.createSampler();
+		var group = device.createBindGroup({
+			pipeline: pipeline,
+			group: Textured.TEXTURE_image_GROUP,
+			entries: [{binding: Textured.TEXTURE_image, texture: image}, {binding: Textured.TEXTURE_image + 1, sampler: sampler}]
+		});
+		var vertices = floats(device, [-1, -1, 0, 1, 1, -1, 1, 1, -1, 1, 0, 0, 1, 1, 1, 0]);
+		var target = device.createTexture({width: 4, height: 4, format: Rgba8Unorm, usage: RenderTarget});
+
+		var encoder = device.createCommandEncoder();
+		var pass = encoder.beginRenderPass(target);
+		pass.setPipeline(pipeline);
+		pass.setBindGroup(Textured.TEXTURE_image_GROUP, group);
+		pass.setVertexBuffer(0, vertices);
+		pass.draw(4);
+		pass.end();
+		device.submit(encoder);
+		readCorner(device, target, 2, [255, 0, 0, 255], [0, 0, 255, 255], "regions", "a 2x2 region written at 2, 2 samples as the bottom right", () -> {
+			closeAll([group, sampler, image, vertices, target, pipeline, shader]);
+			next();
+		}, true);
+	}
+
+	// The first pass clears to blue. The second keeps it and draws a full-screen quad of the
+	// second instance in the buffer, red, with the viewport on the left half and the scissor
+	// on the top half: the top-left quarter is red.
+	static function layered(device:GpuDevice, next:() -> Void) {
+		if (!device.features.has(InstanceVertexBuffers)) {
+			Sys.println('layered: ${device.backend} has no instance vertex buffers');
+			next();
+			return;
+		}
+		var shader = device.createShader(Placed);
+		var pipeline = device.createRenderPipeline({
+			shader: shader,
+			format: Rgba8Unorm,
+			topology: TriangleStrip,
+			vertexBuffers: [
+				{stride: 8, attributes: [{location: Placed.INPUT_position, format: Float32x2, offset: 0}]},
+				{
+					stride: 24,
+					perInstance: true,
+					attributes: [
+						{location: Placed.INPUT_offset, format: Float32x2, offset: 0},
+						{location: Placed.INPUT_color, format: Float32x4, offset: 8}
+					]
+				}
+			]
+		});
+		var corners = floats(device, [-1, -1, 1, -1, -1, 1, 1, 1]);
+		// Two instances: green, then red. The pass reads from the second.
+		var instances = floats(device, [0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1]);
+		var target = device.createTexture({width: 4, height: 4, format: Rgba8Unorm, usage: RenderTarget});
+
+		var encoder = device.createCommandEncoder();
+		encoder.beginRenderPass(target, {r: 0, g: 0, b: 1, a: 1}).end();
+		var pass = encoder.beginRenderPass(target, null, true);
+		pass.setPipeline(pipeline);
+		pass.setViewport(0, 0, 2, 4);
+		pass.setScissorRect(0, 0, 4, 2);
+		pass.setVertexBuffer(0, corners);
+		pass.setVertexBuffer(1, instances, 24);
+		pass.draw(4);
+		pass.end();
+		device.submit(encoder);
+		readCorner(device, target, 2, [255, 0, 0, 255], [0, 0, 255, 255], "layered",
+			"a kept pass draws the offset instance inside the viewport and scissor", () -> {
+				closeAll([instances, corners, target, pipeline, shader]);
+				next();
+			});
 	}
 
 	static function roundTrip(device:GpuDevice, next:() -> Void) {

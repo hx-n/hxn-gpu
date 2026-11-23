@@ -58,9 +58,30 @@ private class Program {
 		program.close();
 }
 
-/** The native of a window frame: the context's default framebuffer, which the window shows. **/
-private class DefaultFramebuffer {
+/**
+	The native of a surface: the texture its frames are rendered into. GLSL from hxnsl
+	flips clip space for textures, so `present` copies the frame into the window's
+	framebuffer, whose origin is the bottom left, with its rows reversed.
+**/
+private class GlSurface {
+	public var frame:Null<NativeTexture>;
+
 	public function new() {}
+
+	public function close():Void {
+		if (frame != null) {
+			frame.close();
+			frame = null;
+		}
+	}
+}
+
+/** The native of a window frame: the surface's texture, which the surface closes. **/
+private class SurfaceFrame {
+	public final texture:NativeTexture;
+
+	public function new(texture:NativeTexture)
+		this.texture = texture;
 
 	public function close():Void {}
 }
@@ -200,8 +221,15 @@ class GlDriver implements Driver {
 		(cast buffer.native : NativeBuffer).write(offset, bytes);
 	}
 
-	public function writeTexture(texture:Texture, bytes:Bytes):Void {
-		(cast texture.native : NativeTexture).write(0, 0, texture.width, texture.height, bytes);
+	public function writeTexture(texture:Texture, region:hxn.gpu.Descriptors.TextureRegion, bytes:Bytes, bytesPerRow:Int):Void {
+		var row = region.width * texture.format.bytesPerPixel();
+		var packed = bytes;
+		if (bytesPerRow != row || bytes.length != row * region.height) {
+			packed = Bytes.alloc(row * region.height);
+			for (y in 0...region.height)
+				packed.blit(y * row, bytes, y * bytesPerRow, row);
+		}
+		nativeTexture(texture).write(region.x, region.y, region.width, region.height, packed);
 	}
 
 	public function readBuffer(buffer:Buffer, offset:Int, size:Int):Future<Bytes> {
@@ -213,11 +241,7 @@ class GlDriver implements Driver {
 		return Settled.attempt(() -> {
 			if (texture.format != Rgba8Unorm && texture.format != Rgba8UnormSrgb)
 				throw '$backend reads back only rgba8 textures, not ${texture.format}';
-			if (Std.isOfType(texture.native, DefaultFramebuffer)) {
-				context.bindDefaultFramebuffer();
-				return context.readPixels(0, 0, texture.width, texture.height);
-			}
-			var framebuffer = context.createFramebuffer(cast texture.native);
+			var framebuffer = context.createFramebuffer(nativeTexture(texture));
 			context.bindFramebuffer(framebuffer);
 			var pixels = context.readPixels(0, 0, texture.width, texture.height);
 			framebuffer.close();
@@ -252,7 +276,7 @@ class GlDriver implements Driver {
 		}
 		if (!same)
 			throw '$backend presents only to the window it opened for, which this is not';
-		surface.native = new Unbound();
+		surface.native = new GlSurface();
 	}
 
 	public function surfaceFormat(surface:GpuSurface):TextureFormat
@@ -261,6 +285,7 @@ class GlDriver implements Driver {
 	public function configureSurface(surface:GpuSurface):Void {
 		if (surface.format != Rgba8Unorm && surface.format != Rgba8UnormSrgb)
 			throw '$backend presents rgba8 frames, not ${surface.format}';
+		(cast surface.native : GlSurface).close();
 		#if hxn_gpu_gles
 		context.resizeWindow(surface.width, surface.height);
 		context.swapInterval(surface.vsync ? 1 : 0);
@@ -270,12 +295,18 @@ class GlDriver implements Driver {
 	}
 
 	public function surfaceTexture(surface:GpuSurface):Texture {
+		var native:GlSurface = cast surface.native;
+		if (native.frame == null)
+			native.frame = context.createTexture(surface.width, surface.height, format(surface.format));
 		var frame = new Texture(surface.device, surface.width, surface.height, surface.format, RenderTarget);
-		frame.native = new DefaultFramebuffer();
+		frame.native = new SurfaceFrame(native.frame);
 		return frame;
 	}
 
 	public function present(surface:GpuSurface, frame:Texture):Void {
+		var framebuffer = context.createFramebuffer(nativeTexture(frame));
+		context.blitFlipped(framebuffer, frame.width, frame.height);
+		framebuffer.close();
 		#if hxn_gpu_gles
 		context.swapBuffers();
 		#else
@@ -288,38 +319,40 @@ class GlDriver implements Driver {
 		release();
 	}
 
-	function render(target:Texture, clear:hxn.gpu.Descriptors.Color, list:Array<Command>):Void {
-		var framebuffer = Std.isOfType(target.native, DefaultFramebuffer) ? null : context.createFramebuffer(cast target.native);
-		if (framebuffer != null)
-			context.bindFramebuffer(framebuffer);
-		else
-			context.bindDefaultFramebuffer();
+	// Rows are addressed from the target's first row: GLSL from hxnsl flips clip space, so
+	// the top of what is drawn is row 0, and viewport and scissor rectangles need no flip.
+	function render(target:Texture, clear:Null<hxn.gpu.Descriptors.Color>, list:Array<Command>):Void {
+		var framebuffer = context.createFramebuffer(nativeTexture(target));
+		context.bindFramebuffer(framebuffer);
 		context.viewport(0, 0, target.width, target.height);
-		context.clear(ClearBits.Color, clear.r, clear.g, clear.b, clear.a);
+		context.scissorTest(false);
+		if (clear != null)
+			context.clear(ClearBits.Color, clear.r, clear.g, clear.b, clear.a);
 		var pipeline:Null<RenderPipeline> = null;
 		var groups = new Map<Int, BindGroup>();
-		var vertexBuffers = new Map<Int, Buffer>();
+		var vertexBuffers = new Map<Int, {buffer:Buffer, offset:Int}>();
 		var index:Null<{buffer:Buffer, format:IndexFormat}> = null;
 		// Vertex arrays created in this pass, keyed by pipeline and buffers.
 		var arrays = new Map<String, VertexArray>();
 		function vertexArray():VertexArray {
-			var key = '${pipeline.id}:' + [for (slot => b in vertexBuffers) '$slot=${b.id}'].join(",") + (index != null ? '/${index.buffer.id}' : "");
+			var key = '${pipeline.id}:' + [for (slot => b in vertexBuffers) '$slot=${b.buffer.id}+${b.offset}'].join(",") + (index != null ? '/${index.buffer.id}' : "");
 			var found = arrays.get(key);
 			if (found != null)
 				return found;
 			var vao = context.createVertexArray();
 			for (slot in 0...pipeline.vertexBuffers.length) {
 				var layout = pipeline.vertexBuffers[slot];
-				var buffer = vertexBuffers.get(slot);
-				if (buffer == null)
+				var bound = vertexBuffers.get(slot);
+				if (bound == null)
 					throw 'the pipeline reads vertex buffer $slot, which is not set';
+				var buffer = bound.buffer;
 				for (a in layout.attributes) {
 					switch (a.format) {
 						case Uint32 | Sint32:
 							vao.integerAttribute(a.location, cast buffer.native, 1, a.format == Uint32 ? ComponentType.UnsignedInt : ComponentType.Int,
-								layout.stride, a.offset);
+								layout.stride, a.offset + bound.offset);
 						case _:
-							vao.attribute(a.location, cast buffer.native, a.format.components(), ComponentType.Float, false, layout.stride, a.offset);
+							vao.attribute(a.location, cast buffer.native, a.format.components(), ComponentType.Float, false, layout.stride, a.offset + bound.offset);
 					}
 					if (layout.perInstance == true)
 						vao.divisor(a.location, 1);
@@ -354,8 +387,13 @@ class GlDriver implements Driver {
 					context.useProgram(program.program);
 				case SetBindGroup(i, group):
 					groups.set(i, group);
-				case SetVertexBuffer(slot, buffer):
-					vertexBuffers.set(slot, buffer);
+				case SetVertexBuffer(slot, buffer, offset):
+					vertexBuffers.set(slot, {buffer: buffer, offset: offset});
+				case SetViewport(x, y, width, height):
+					context.viewport(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
+				case SetScissor(x, y, width, height):
+					context.scissorTest(true);
+					context.scissor(x, y, width, height);
 				case SetIndexBuffer(buffer, format):
 					index = {buffer: buffer, format: format};
 				case Draw(vertices, instances, first):
@@ -370,10 +408,14 @@ class GlDriver implements Driver {
 						first * size, instances);
 				case _:
 			}
+		context.scissorTest(false);
 		for (vao in arrays)
 			vao.close();
-		if (framebuffer != null)
-			framebuffer.close();
+		framebuffer.close();
+	}
+
+	static function nativeTexture(texture:Texture):NativeTexture {
+		return Std.isOfType(texture.native, SurfaceFrame) ? (cast texture.native : SurfaceFrame).texture : cast texture.native;
 	}
 
 	/**
