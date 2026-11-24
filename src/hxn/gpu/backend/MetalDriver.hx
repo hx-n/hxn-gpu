@@ -500,6 +500,7 @@ class MetalDriver implements Driver {
 			case Float32x4: Float4;
 			case Uint32: UInt;
 			case Sint32: Int;
+			case Unorm8x4: UChar4Normalized;
 		}
 	}
 

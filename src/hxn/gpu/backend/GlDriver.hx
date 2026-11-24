@@ -376,6 +376,8 @@ class GlDriver implements Driver {
 						case Uint32 | Sint32:
 							vao.integerAttribute(a.location, cast buffer.native, 1, a.format == Uint32 ? ComponentType.UnsignedInt : ComponentType.Int,
 								layout.stride, a.offset + bound.offset);
+						case Unorm8x4:
+							vao.attribute(a.location, cast buffer.native, 4, ComponentType.UnsignedByte, true, layout.stride, a.offset + bound.offset);
 						case _:
 							vao.attribute(a.location, cast buffer.native, a.format.components(), ComponentType.Float, false, layout.stride, a.offset + bound.offset);
 					}

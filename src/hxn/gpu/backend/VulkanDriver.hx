@@ -505,6 +505,7 @@ class VulkanDriver implements Driver {
 			case Float32x4: Rgba32Float;
 			case Uint32: R32Uint;
 			case Sint32: R32Sint;
+			case Unorm8x4: Rgba8Unorm;
 		}
 	}
 

@@ -329,6 +329,7 @@ class WebGPUDriver implements Driver {
 			case Float32x4: Float32x4;
 			case Uint32: Uint32;
 			case Sint32: Sint32;
+			case Unorm8x4: Unorm8x4;
 		}
 	}
 
