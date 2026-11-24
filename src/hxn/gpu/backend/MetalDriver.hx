@@ -284,6 +284,7 @@ class MetalDriver implements Driver {
 			native.format = surface.format;
 		}
 		native.layer.setDrawableSize(surface.width, surface.height);
+		native.layer.setDisplaySync(surface.vsync);
 	}
 
 	public function surfaceTexture(surface:GpuSurface):Texture {
