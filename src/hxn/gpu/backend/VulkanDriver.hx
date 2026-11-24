@@ -202,7 +202,10 @@ class VulkanDriver implements Driver {
 	}
 
 	public function writeBuffer(buffer:Buffer, offset:Int, bytes:Bytes):Void {
-		idle();
+		// Only the work that uses the buffer must finish before the CPU writes it.
+		var use:Null<Future<hxn.Unit>> = buffer.use;
+		if (use != null && !use.isReady())
+			use.await();
 		(cast buffer.native : NativeBuffer).write(offset, bytes);
 	}
 
@@ -258,7 +261,7 @@ class VulkanDriver implements Driver {
 				case CopyStep(_, _, _, _, _):
 					throw "Vulkan has no buffer copies";
 			}
-		run(commands);
+		Uses.mark(steps, run(commands));
 	}
 
 	public function completed():Future<hxn.Unit> {

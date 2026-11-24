@@ -253,7 +253,10 @@ class D3D12Driver implements Driver {
 	public function writeBuffer(buffer:Buffer, offset:Int, bytes:Bytes):Void {
 		var memory = memoryOf(buffer);
 		if (memory.upload) {
-			idle();
+			// Only the work that uses the buffer must finish before the CPU writes it.
+			var use:Null<Future<hxn.Unit>> = buffer.use;
+			if (use != null && !use.isReady())
+				use.await();
 			memory.buffer.write(offset, bytes);
 			return;
 		}
@@ -332,7 +335,7 @@ class D3D12Driver implements Driver {
 				case CopyStep(_, _, _, _, _):
 					throw "Direct3D 12 has no buffer copies in hxn-gpu";
 			}
-		run(commands);
+		Uses.mark(steps, run(commands));
 	}
 
 	public function completed():Future<hxn.Unit> {

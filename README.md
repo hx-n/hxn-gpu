@@ -212,7 +212,10 @@ On Vulkan and Direct3D 12, one tracker turns each change in how a resource is
 used into the barrier or state transition it needs.
 
 `writeBuffer` and `writeTexture` take effect before the work submitted after
-them. `readBuffer` and `readTexture` return an `hxn.Future` of the contents
+them. On Metal, Vulkan and Direct3D 12, `writeBuffer` first waits for the
+submitted work that uses the buffer, and only that work. A write to a buffer
+that no unfinished work uses does not wait, so an app that writes a different
+buffer in each frame lets the CPU prepare a frame while the GPU draws the last. `readBuffer` and `readTexture` return an `hxn.Future` of the contents
 once the work submitted before has run, and `completed()` settles when that
 work is done:
 

@@ -193,7 +193,10 @@ class MetalDriver implements Driver {
 	}
 
 	public function writeBuffer(buffer:Buffer, offset:Int, bytes:Bytes):Void {
-		idle();
+		// Only the work that uses the buffer must finish before the CPU writes it.
+		var use:Null<MetalUse> = buffer.use;
+		if (use != null && !use.done.isReady())
+			use.commands.waitUntilCompleted();
 		(cast buffer.native : NativeBuffer).write(offset, bytes);
 	}
 
@@ -247,7 +250,7 @@ class MetalDriver implements Driver {
 				case CopyStep(_, _, _, _, _):
 					throw "Metal has no buffer copies";
 			}
-		commit(commands);
+		Uses.mark(steps, new MetalUse(commands, commit(commands)));
 	}
 
 	public function completed():Future<hxn.Unit> {
@@ -516,6 +519,17 @@ class MetalDriver implements Driver {
 			case Repeat: Repeat;
 			case MirrorRepeat: MirrorRepeat;
 		}
+	}
+}
+
+/** Each use is one committed command buffer and the future that settles when it completes. **/
+private class MetalUse {
+	public final commands:CommandBuffer;
+	public final done:Future<hxn.Unit>;
+
+	public function new(commands:CommandBuffer, done:Future<hxn.Unit>) {
+		this.commands = commands;
+		this.done = done;
 	}
 }
 #end
