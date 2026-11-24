@@ -4,12 +4,12 @@
   "description": "One GPU API for Haxe over the hxn GPU drivers: Metal, Vulkan, Direct3D 12, OpenGL ES, WebGPU and WebGL2, with features and limits per device",
   "url": "https://github.com/hx-n/hxn-gpu",
   "license": "Apache",
-  "tags": ["gpu", "graphics", "compute", "webgpu", "metal", "vulkan", "d3d12", "opengl-es", "webgl2", "haxe", "hxcpp", "hashlink", "native", "cross", "wasm"],
+  "tags": ["gpu", "graphics", "compute", "webgpu", "metal", "vulkan", "d3d12", "opengl-es", "webgl2", "haxe", "hxcpp", "hashlink", "cppia", "native", "cross", "wasm"],
   "contributors": [
     "darmie",
     "rayzor"
   ],
-  "releasenote": "Blend what a render pipeline draws, write part of a texture, set viewports and scissors, keep a pass's target, read vertex buffers from an offset, draw into several color targets in one pass, and test and write depth. GLES and WebGL2 frames are upright. Needs hxn-gpu-metal 0.2.3, -vulkan 0.3.3, -d3d12 0.2.3, -gles 0.3.3, -webgpu 0.3.6, -webgl2 0.3.5.",
+  "releasenote": "Blend what a render pipeline draws, write part of a texture, set viewports and scissors, keep a pass's target, read vertex buffers from an offset, draw into several color targets in one pass, and test and write depth. Read four normalized bytes as a vertex attribute, and set whether presents wait for the display's refresh. writeBuffer waits only for the work that uses the buffer. GLES and WebGL2 frames are upright. Needs hxn-gpu-metal 0.2.4, -vulkan 0.3.3, -d3d12 0.2.3, -gles 0.3.3, -webgpu 0.3.6, -webgl2 0.3.5.",
   "classPath": "src",
   "dependencies": {
     "hxn": "0.3.9",

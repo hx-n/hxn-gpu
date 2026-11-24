@@ -28,7 +28,7 @@ jobs:
       matrix:
         include:
           - os: macos-15
-            drivers: hxn-gpu-metal:0.2.3 hxn-gpu-gles:0.3.3
+            drivers: hxn-gpu-metal:0.2.4 hxn-gpu-gles:0.3.3
             backends: metal gles
             hl: "false"
           - os: ubuntu-latest
