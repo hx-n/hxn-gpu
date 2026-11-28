@@ -8,7 +8,7 @@ class Setup {
 	/** The oldest driver version hxn-gpu supports in each major.minor series. **/
 	static final supported = [
 		"hxn-gpu-metal" => "0.2.3",
-		"hxn-gpu-vulkan" => "0.3.3",
+		"hxn-gpu-vulkan" => "0.3.4",
 		"hxn-gpu-d3d12" => "0.2.3",
 		"hxn-gpu-gles" => "0.3.3",
 		"hxn-gpu-webgpu" => "0.3.6",
