@@ -277,8 +277,12 @@ class VulkanDriver implements Driver {
 		}
 	}
 
-	public function surfaceFormat(surface:GpuSurface):TextureFormat
-		return Bgra8Unorm;
+	public function surfaceFormat(surface:GpuSurface):TextureFormat {
+		return switch device.surfaceFormat((cast surface.native : VulkanSurface).surface) {
+			case Rgba8Unorm: Rgba8Unorm;
+			case _: Bgra8Unorm;
+		}
+	}
 
 	public function configureSurface(surface:GpuSurface):Void {
 		var native:VulkanSurface = cast surface.native;
